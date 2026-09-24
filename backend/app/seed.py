@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai import get_ai_provider
 from app.auth.security import hash_password
+from app.config import get_settings
 from app.db import SessionLocal
 from app.models import (
     Category,
@@ -137,6 +138,10 @@ KB_ARTICLES = [
 
 
 async def seed_users(session: AsyncSession) -> None:
+    # The demo accounts share a published password: never create them in prod.
+    if get_settings().ENV == "prod":
+        logger.info("seed: ENV=prod, skipping the demo accounts")
+        return
     for u in USERS:
         existing = await session.scalar(select(User).where(User.email == u["email"]))
         if existing:
@@ -213,6 +218,13 @@ async def main() -> None:
         await seed_sla_policies(session)
         await seed_categories(session)
         await seed_kb_articles(session)
+        settings = get_settings()
+        if settings.seed_demo:
+            from app.seed_demo import seed_demo_tickets
+
+            created = await seed_demo_tickets(session, settings.DEMO_DATA_PATH)
+            if created:
+                logger.info("seed: added %d demo tickets", created)
     logger.info("seed: complete")
 
 

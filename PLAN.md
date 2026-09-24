@@ -505,11 +505,63 @@ Each phase ends with **Verify**: commands the executor must actually run, with t
     - The priority label map was duplicated.
 
 ### Phase 10 — Hardening & acceptance
-- [ ] README: one-command start, seeded credentials, how to add `GEMINI_API_KEY`, the fake vs gemini provider, and the stated seed/type/tone.
-- [ ] Seed ~25 demo tickets across all statuses/priorities (behind `SEED_DEMO=true`, default on locally) so the queue and dashboard aren't empty. If `docs/demo-data/tickets.json` exists, load that content rather than writing new tickets. Timestamps in it are relative offsets, so resolve them against `now` at seed time, and set the SLA fields through `domain/sla.py`, not by hand.
-- [ ] Fresh-clone test: `docker compose down -v && docker compose up --build` with no `.env` and no manual steps.
-- [ ] Walk the brief's **acceptance checklist** item by item, with evidence (command output / screenshot path) for each. Record the results in the table at the bottom of this file. Anything unverified is marked as such, not ticked.
-- [ ] Run the `code-review` skill at `high` on the full codebase and fix confirmed findings. Run `security-review` (auth scoping, internal-note leakage, upload handling).
+- [x] README: one-command start, seeded credentials, how to add `GEMINI_API_KEY`, the fake vs gemini provider, and the stated seed/type/tone.
+- [x] Seed ~25 demo tickets across all statuses/priorities (behind `SEED_DEMO=true`, default on locally) so the queue and dashboard aren't empty. If `docs/demo-data/tickets.json` exists, load that content rather than writing new tickets. Timestamps in it are relative offsets, so resolve them against `now` at seed time, and set the SLA fields through `domain/sla.py`, not by hand.
+- [x] Fresh-clone test: `docker compose down -v && docker compose up --build` with no `.env` and no manual steps.
+- [x] Walk the brief's **acceptance checklist** item by item, with evidence (command output / screenshot path) for each. Record the results in the table at the bottom of this file. Anything unverified is marked as such, not ticked.
+- [x] Run the `code-review` skill at `high` on the full codebase and fix confirmed findings. Run `security-review` (auth scoping, internal-note leakage, upload handling).
+
+  **Evidence (2026-09-24):**
+  - **README** ([README.md](README.md)) covers: one-command start (`docker compose up --build`), the seeded credentials table, adding `GEMINI_API_KEY` (`.env` → recreate api/worker → `scripts/smoke_gemini.py`), fake vs. Gemini provider behaviour including fallbacks, the stated seed/typefaces/tone, tests, dependency changes, and the iteration-2 seams.
+  - **Demo seed** (`backend/app/seed_demo.py`) loads [docs/demo-data/tickets.json](docs/demo-data/tickets.json) exactly as its README maps it:
+    - One `now` for every relative offset.
+    - Due dates through `domain/sla.compute_due_dates`.
+    - `pending_minutes` as the current pause (pending) or completed pause time (otherwise).
+    - `first_responded_at` from the earliest public agent comment.
+    - `ai_*` and `escalated` written through; oldest first, with `parent_ref` resolved.
+    - One `ticket.created` system audit row per ticket, dated at creation. No events are published.
+
+    The data is mounted read-only at `/demo-data`. Seeding runs only on an empty `tickets` table, and `SEED_DEMO` now defaults to on only when `ENV=local`.
+
+    **Process note:** my first version wrote its own 25 tickets. The planner had added `docs/demo-data/` and the "load that content" instruction while Phase 8 was in progress. The full-codebase code review caught it, and the seeder was rewritten around the file.
+
+    `tests/test_seed_demo.py` (3 tests): the field-by-field mapping against the file, idempotency, the t25→t24 follow-up, internal-note counts, audit rows dated at creation, **stability under both worker sweeps** (the SLA-risk sweep and auto-close sweep change nothing at seed time), and local-only defaults. `node docs/demo-data/check-tickets.mjs tickets.json` → `PASS: all checks`.
+  - **Fresh-clone test** (no `.env` present), `docker compose down -v && docker compose up -d --build`:
+    - All 5 services came up, and `api` became healthy.
+    - The api log shows both migrations, then `seed: added 25 demo tickets`, `seed: complete` and `Application startup complete`.
+    - `GET /health` → `{"status":"ok","db":true,"redis":true}`, and the frontend returned 200.
+    - The DB shows new 3 / triaged 3 / open 5 / in_progress 6 / pending 3 / resolved 3 / closed 2, with 2 escalated and 1 follow-up, matching the demo-data README exactly.
+    - After two sweep rounds the worker logged **0 errors** and changed nothing.
+
+    On this fresh stack: `pytest` → **144 passed**, ruff clean, `npm run typecheck` clean, `vitest` → **24 passed**, `npm run build` OK, Playwright → **18 passed** (all axe scans 0 violations).
+  - **Found and fixed by the fresh-clone runs:**
+    - **The worker swept before `api` had migrated the database.** The first sweeps logged `relation "tickets" does not exist`. `api` now has a `/health` healthcheck and the worker `depends_on` it being healthy.
+    - **Publishing Postgres/Redis on `127.0.0.1` was refused on this Windows host.** Nothing needs them on the host, so they're no longer published at all, which also resolves security finding L4.
+    - A one-off Docker BuildKit "parent snapshot does not exist" error on the first rebuild succeeded on retry. It was local Docker cache state, not the project.
+  - **Code review (`code-review` at high) of the full codebase** (`backend/app`, `frontend/src`) found 10 issues, all fixed:
+    - Demo data didn't come from `docs/demo-data/tickets.json`.
+    - The seeded urgent/high tickets were at risk, so the sweep escalated them on start.
+    - Audit rows were dated at seed time.
+    - A Redis failure could block startup, and events were published at all.
+    - Due dates were computed by hand instead of through `domain/sla.py`.
+    - `new` tickets had non-normal priority.
+    - `SEED_DEMO` was on in prod.
+    - The queue table's `minWidth` hadn't grown with the SLA column.
+    - The seed did per-ticket user queries.
+    - `first_responded_at` wasn't derived from real comments.
+  - **Security review:**
+    - **The `security-review` skill could not run.** It diffs against `origin/HEAD`, and this repo has no remote (`fatal: ambiguous argument 'origin/HEAD...'`). An independent read-only security review of the full codebase was run instead, with the same scope: auth scoping, internal-note leakage, upload handling, JWT and admin.
+    - **No high-severity findings.** Verified safe: every ticket route's 404 scoping, end-user list filters, the response-model unions, agent- and admin-only routes, internal notes filtered in SQL (comments, attachments, download), path traversal, JWT algorithm pinning and expiry, `register` forced to `end_user`, bound parameters in all raw SQL, the Gemini key never logged, and no HTML sinks in the frontend.
+    - Fixed:
+      - **M1:** seeded demo accounts with the published password are no longer created when `ENV=prod`.
+      - **M2:** a streaming request-body cap (`app/body_limit.py`) rejects oversized uploads before multipart parsing, even unauthenticated ones.
+      - **L1:** end users can attach only to their own public comments.
+      - **L2:** declared types must match the file's magic bytes / UTF-8 text.
+      - **L4:** DB and Redis ports are no longer published.
+      - **Info:** JWTs must carry `exp` and `sub`.
+    - Tests: `test_upload_body_cap_type_sniffing_and_comment_ownership`, `test_tokens_without_exp_or_sub_are_rejected`, `test_seed_users_is_skipped_in_prod`.
+    - **Accepted as policy, not fixed (L3):** public ticket models include IDs, `escalated` and `ai_summary` for the customer's own tickets. None of these is on the brief's agent-only list.
+  - **Still unverified:** the **live Gemini path**. No `GEMINI_API_KEY` exists here, and `scripts/smoke_gemini.py` reports `nothing to smoke-test` (exit 2). The REST shapes are verified only against the ai.google.dev docs and `httpx.MockTransport` tests.
 
 ---
 
@@ -531,9 +583,9 @@ Out of scope (do **not** build): email/social intake, sentiment, in-thread draft
 
 | Brief criterion | Status | Evidence |
 |---|---|---|
-| `docker compose up` brings up the full stack, no manual steps | ☐ | |
-| End user submits, sees it listed, Gemini category/priority auto-applied | ☐ | |
-| Agent sees it in the queue, walks the full lifecycle, adds an internal note | ☐ | |
-| SLA due timestamps set on create, pause while `pending` | ☐ | |
-| KB search returns a grounded answer + source link for ≥3 seeded articles | ☐ | |
-| Both portals visibly M3; seed/typography stated and consistent | ☐ | |
+| `docker compose up` brings up the full stack, no manual steps | ☑ | Fresh clone with no `.env`: `docker compose down -v && docker compose up -d --build`. The API ran migrations, the seed and 25 demo tickets on its own, `/health` returned ok, and the frontend returned 200. The worker started after the API was healthy and logged 0 errors. All suites then passed on that stack (Phase 10 evidence). |
+| End user submits, sees it listed, Gemini category/priority auto-applied | ◐ **Verified with the fake provider; live Gemini not run** | The full flow works through the real worker: `e2e/phase7-enduser.spec.ts` registers, submits "Charged twice this month", sees the **Billing** and **High priority** chips appear once the worker's triage lands, then sees the request in "Your requests". The Phase 5 live check shows `triaged ticket 3 with fake`. The Gemini `generateContent` request is built from the documented shape and tested with `httpx.MockTransport`, but **no live call was made** (no `GEMINI_API_KEY`; `smoke_gemini.py` exit 2). |
+| Agent sees it in the queue, walks the full lifecycle, adds an internal note | ☑ | `e2e/phase8-agent.spec.ts`: an agent finds the ticket in the queue and, in the UI, takes it through triaged → open (after "Take it") → in_progress → reply → internal note → pending → in_progress → resolved → closed. A separate customer session and the API both confirm the note is never visible to the customer. Screenshots are in `docs/screenshots/phase-8/`. |
+| SLA due timestamps set on create, pause while `pending` | ☑ | `tests/test_tickets.py::test_full_lifecycle_walk_sla_pause_and_follow_up` (frozen clock: resolution due shifts by exactly the 2h pause, `sla_paused_total_seconds == 7200`), the pause-credit regressions in `test_domain_sla.py`, and the Phase 5 live check (urgent: `sla_response_due = created + 15m`). The UI shows "Paused" with a dashed ring (`e2e/phase8-agent.spec.ts`, `queue-demo-1600.png`). |
+| KB search returns a grounded answer + source link for ≥3 seeded articles | ◐ **Verified with the fake provider; live Gemini not run** | `tests/test_kb.py` checks 4 seeded articles, each returning an answer with `[1]` and a source slug, plus `GET /kb/articles/{slug}`; an irrelevant query returns `answer: null`. The Phase 5 live curl showed 5 queries grounded to the right article. `e2e/phase7-enduser.spec.ts` shows the answer panel, the "Source 1: Resetting your password" marker and a chip linking to `/help/resetting-your-password`. These answers come from the fake's extractive grounding. **The Gemini-generated grounded answer has not run live** (no key); its prompt, id-based citation grounding and fallback are unit-tested. |
+| Both portals visibly M3; seed/typography stated and consistent | ☑ | Seed `#1E6A5E`, Google Sans Flex / Roboto Flex and the tone are stated in [docs/design-plan.md](docs/design-plan.md) and the README. The scheme is generated at runtime through `SchemeContent` (asserted on `:root` in Playwright). The `material-3` audits passed with every category ≥ 7: [phase 7](docs/audits/phase-7-md3.md) 85/100, [phase 8](docs/audits/phase-8-md3.md) 84/100, [phase 9](docs/audits/phase-9-md3.md) 84/100. axe finds 0 WCAG 2.2 AA violations across both portals in light and dark. Screenshots are in `docs/screenshots/phase-6…10/`. |

@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app import models  # noqa: F401 -- registers models on Base.metadata
+from app.body_limit import BodySizeLimitMiddleware
 from app.config import get_settings
 from app.db import engine
 from app.redis_client import get_redis
@@ -25,6 +26,7 @@ settings.check_prod_safe()
 
 app = FastAPI(title="Ticketing Portal API")
 
+app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],

@@ -5,8 +5,8 @@ services:
       POSTGRES_USER: ticketing
       POSTGRES_PASSWORD: ticketing
       POSTGRES_DB: ticketing
-    ports:
-      - "5432:5432"
+    # No published port: only the api/worker reach it, over the compose
+    # network (dev credentials never exposed on the host).
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -17,8 +17,7 @@ services:
 
   redis:
     image: redis:7
-    ports:
-      - "6379:6379"
+    # No published port, as for db.
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -40,8 +39,18 @@ services:
     volumes:
       - ./backend:/app
       - attachments_data:/data/attachments
+      # docs/demo-data/tickets.json feeds the SEED_DEMO seed (read-only).
+      - ./docs/demo-data:/demo-data:ro
     ports:
       - "8000:8000"
+    # Healthy only once migrations + seed have run and uvicorn answers, so
+    # the worker never sweeps a database without tables.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
     depends_on:
       db:
         condition: service_healthy
@@ -62,7 +71,7 @@ services:
       - ./backend:/app
       - attachments_data:/data/attachments
     depends_on:
-      db:
+      api:
         condition: service_healthy
       redis:
         condition: service_healthy

@@ -23,3 +23,15 @@ def test_prod_with_strong_secret_starts():
 def test_local_with_default_secret_starts():
     settings = Settings(ENV="local", JWT_SECRET="dev-secret-change-me")
     settings.check_prod_safe()
+
+
+async def test_seed_users_is_skipped_in_prod(db_session, monkeypatch):
+    from sqlalchemy import func, select
+
+    from app import seed
+    from app.config import get_settings
+    from app.models import User
+
+    monkeypatch.setattr(get_settings(), "ENV", "prod")
+    await seed.seed_users(db_session)
+    assert await db_session.scalar(select(func.count()).select_from(User)) == 0

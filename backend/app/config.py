@@ -55,8 +55,9 @@ class Settings(BaseSettings):
     ATTACHMENTS_DIR: str = "/data/attachments"
     ATTACHMENT_MAX_BYTES: int = 10 * 1024 * 1024
 
-    # Demo data
-    SEED_DEMO: bool = True
+    # Demo data: on by default only for local runs (never an implicit prod seed).
+    SEED_DEMO: bool | None = None
+    DEMO_DATA_PATH: str = "/demo-data/tickets.json"
 
     def check_prod_safe(self) -> None:
         """Phase 3 follow-up: refuse to start in prod with a weak/default
@@ -67,6 +68,10 @@ class Settings(BaseSettings):
             raise RuntimeError(
                 "JWT_SECRET must be set to a random value of at least 32 bytes when ENV=prod"
             )
+
+    @property
+    def seed_demo(self) -> bool:
+        return self.ENV == "local" if self.SEED_DEMO is None else self.SEED_DEMO
 
     @property
     def use_gemini(self) -> bool:

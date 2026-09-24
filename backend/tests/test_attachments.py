@@ -154,3 +154,54 @@ async def test_download_is_scoped_and_internal_note_attachments_never_reach_end_
     assert [a["id"] for a in as_owner["attachments"]] == [public["id"]]
     as_agent = (await client.get(f"/tickets/{ticket_id}", headers=_auth(agent_token))).json()
     assert {a["id"] for a in as_agent["attachments"]} == {public["id"], internal["id"]}
+
+
+async def test_upload_body_cap_type_sniffing_and_comment_ownership(client, db_session, monkeypatch):
+    from app.config import get_settings
+    from tests.helpers import create_agent, login
+
+    token = await _register(client, "sec-owner@example.com")
+    await create_agent(db_session, email="sec-agent@example.com")
+    agent_token = await login(client, "sec-agent@example.com")
+    ticket_id = (await client.post("/tickets", json={"subject": "s", "description": "d"}, headers=_auth(token))).json()["id"]
+
+    # Declared type must match the contents.
+    fake_png = await client.post(
+        f"/tickets/{ticket_id}/attachments", files={"file": ("x.png", b"<html>not a png", "image/png")}, headers=_auth(token)
+    )
+    assert fake_png.status_code == 415
+    binary_as_text = await client.post(
+        f"/tickets/{ticket_id}/attachments", files={"file": ("x.txt", b"MZ\x00\x01", "text/plain")}, headers=_auth(token)
+    )
+    assert binary_as_text.status_code == 415
+
+    # Customers can't attach to an agent's reply or an internal note.
+    reply = (await client.post(f"/tickets/{ticket_id}/comments", json={"body": "hi"}, headers=_auth(agent_token))).json()["comment"]
+    note = (
+        await client.post(f"/tickets/{ticket_id}/comments", json={"body": "n", "is_internal_note": True}, headers=_auth(agent_token))
+    ).json()["comment"]
+    mine = (await client.post(f"/tickets/{ticket_id}/comments", json={"body": "mine"}, headers=_auth(token))).json()["comment"]
+    for cid, expected in ((reply["id"], 422), (note["id"], 422), (mine["id"], 201)):
+        resp = await client.post(
+            f"/tickets/{ticket_id}/attachments",
+            files={"file": ("a.txt", b"hello", "text/plain")},
+            data={"comment_id": str(cid)},
+            headers=_auth(token),
+        )
+        assert resp.status_code == expected, (cid, resp.text)
+
+    # Oversized bodies are refused before parsing, even without auth.
+    monkeypatch.setattr(get_settings(), "ATTACHMENT_MAX_BYTES", 1000)
+    big = await client.post(f"/tickets/{ticket_id}/attachments", files={"file": ("b.txt", b"a" * 200_000, "text/plain")})
+    assert big.status_code == 413
+
+
+async def test_tokens_without_exp_or_sub_are_rejected(client):
+    import jwt
+
+    from app.config import get_settings
+
+    s = get_settings()
+    for payload in ({"sub": "1"}, {"exp": 9999999999}):
+        token = jwt.encode(payload, s.JWT_SECRET, algorithm=s.JWT_ALGORITHM)
+        assert (await client.get("/auth/me", headers=_auth(token))).status_code == 401

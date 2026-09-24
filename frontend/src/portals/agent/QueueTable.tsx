@@ -13,7 +13,8 @@ const COLUMNS: { key: string; label: string; width?: number; align?: "right" }[]
   { key: "requester", label: "Requester", width: 150 },
   { key: "priority", label: "Priority", width: 92 },
   { key: "status", label: "Status", width: 112 },
-  { key: "sla", label: "SLA", width: 148 },
+  // Wide enough for "22h 04m over" + "Breached" without truncation.
+  { key: "sla", label: "SLA", width: 196 },
   { key: "assignee", label: "Assignee", width: 140 },
   { key: "updated", label: "Updated", width: 80, align: "right" },
 ];
@@ -42,7 +43,7 @@ export function QueueTable({
 
   return (
     <Box sx={{ overflowX: "auto" }}>
-      <Table size="small" stickyHeader aria-label="Tickets" sx={{ tableLayout: "fixed", minWidth: 980 }}>
+      <Table size="small" stickyHeader aria-label="Tickets" sx={{ tableLayout: "fixed", minWidth: 1028 }}>
         <TableHead>
           <TableRow>
             {COLUMNS.map((c) => (

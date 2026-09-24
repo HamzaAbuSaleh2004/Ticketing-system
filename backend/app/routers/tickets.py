@@ -59,6 +59,26 @@ ALLOWED_ATTACHMENT_CONTENT_TYPES = {
     "text/plain",
 }
 
+# Leading bytes each allowed type must start with: the declared type alone
+# is whatever the client says.
+_MAGIC: dict[str, tuple[bytes, ...]] = {
+    "image/png": (b"\x89PNG",),
+    "image/jpeg": (b"\xff\xd8\xff",),
+    "image/gif": (b"GIF87a", b"GIF89a"),
+    "application/pdf": (b"%PDF-",),
+}
+
+
+def _content_matches_type(content_type: str, contents: bytes) -> bool:
+    if content_type == "text/plain":
+        try:
+            contents.decode("utf-8")
+        except UnicodeDecodeError:
+            return False
+        return b"\x00" not in contents
+    return contents.startswith(_MAGIC[content_type])
+
+
 _SORTABLE_COLUMNS: dict[str, ColumnElement] = {
     "id": Ticket.id,
     "created_at": Ticket.created_at,
@@ -594,12 +614,22 @@ async def upload_attachment(
     contents = await file.read(settings.ATTACHMENT_MAX_BYTES + 1)
     if len(contents) > settings.ATTACHMENT_MAX_BYTES:
         raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, detail="Attachment too large")
+    if not _content_matches_type(file.content_type, contents):
+        raise HTTPException(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="The file's contents don't match its type"
+        )
 
     if comment_id is not None:
         comment = await session.get(TicketComment, comment_id)
-        if comment is None or comment.ticket_id != ticket.id:
+        # End users may only attach to their own public comments: not an
+        # agent's reply (it would look sent by staff) and not an internal
+        # note (whose existence they mustn't be able to probe).
+        allowed = comment is not None and comment.ticket_id == ticket.id
+        if allowed and not _is_agent(user):
+            allowed = comment.author_id == user.id and not comment.is_internal_note
+        if not allowed:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT, detail="comment_id must belong to this ticket"
+                status.HTTP_422_UNPROCESSABLE_CONTENT, detail="comment_id must be one of your comments on this ticket"
             )
 
     directory = Path(settings.ATTACHMENTS_DIR) / str(ticket.id)
