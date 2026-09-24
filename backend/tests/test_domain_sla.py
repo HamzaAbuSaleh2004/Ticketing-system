@@ -26,9 +26,8 @@ def test_recompute_on_priority_change_when_nothing_pinned():
         response_minutes=15,
         resolution_minutes=240,
         first_responded_at=None,
-        paused_at=None,
+        paused_total_seconds=0,
         current_response_due=CREATED + timedelta(minutes=999),
-        current_resolution_due=CREATED + timedelta(minutes=999),
     )
     assert response_due == CREATED + timedelta(minutes=15)
     assert resolution_due == CREATED + timedelta(minutes=240)
@@ -41,27 +40,53 @@ def test_recompute_on_priority_change_freezes_response_due_after_first_response(
         response_minutes=15,
         resolution_minutes=240,
         first_responded_at=CREATED + timedelta(minutes=5),
-        paused_at=None,
+        paused_total_seconds=0,
         current_response_due=stale_response_due,
-        current_resolution_due=CREATED + timedelta(minutes=999),
     )
     assert response_due == stale_response_due
     assert resolution_due == CREATED + timedelta(minutes=240)
 
 
-def test_recompute_on_priority_change_leaves_resolution_due_while_paused():
-    stale_resolution_due = CREATED + timedelta(minutes=999)
-    response_due, resolution_due = recompute_due_on_priority_change(
+def test_priority_change_after_a_pause_keeps_the_pause_credit():
+    # Pending for 2h, resumed, then escalated: the new window still includes the 2h.
+    due = CREATED + timedelta(hours=24)
+    paused_at = enter_pending(CREATED + timedelta(hours=1))
+    due, paused_total = leave_pending(
+        resolution_due=due, paused_at=paused_at, paused_total_seconds=0,
+        now=paused_at + timedelta(hours=2),
+    )
+    _, resolution_due = recompute_due_on_priority_change(
         created_at=CREATED,
         response_minutes=15,
         resolution_minutes=240,
         first_responded_at=None,
-        paused_at=CREATED + timedelta(minutes=30),
-        current_response_due=CREATED + timedelta(minutes=999),
-        current_resolution_due=stale_resolution_due,
+        paused_total_seconds=paused_total,
+        current_response_due=None,
     )
-    assert response_due == CREATED + timedelta(minutes=15)
-    assert resolution_due == stale_resolution_due
+    assert resolution_due == CREATED + timedelta(hours=4) + timedelta(hours=2)
+
+
+def test_priority_change_while_pending_tightens_due_and_resume_adds_the_pause():
+    # Escalated while pending (after an earlier 30m pause), resumed 1h later:
+    # due = new window + all pause time.
+    earlier_pause = int(timedelta(minutes=30).total_seconds())
+    paused_at = CREATED + timedelta(hours=3)
+    _, resolution_due = recompute_due_on_priority_change(
+        created_at=CREATED,
+        response_minutes=15,
+        resolution_minutes=240,
+        first_responded_at=None,
+        paused_total_seconds=earlier_pause,
+        current_response_due=None,
+    )
+    assert resolution_due == CREATED + timedelta(hours=4, minutes=30)
+
+    resolution_due, paused_total = leave_pending(
+        resolution_due=resolution_due, paused_at=paused_at,
+        paused_total_seconds=earlier_pause, now=paused_at + timedelta(hours=1),
+    )
+    assert paused_total == int(timedelta(hours=1, minutes=30).total_seconds())
+    assert resolution_due == CREATED + timedelta(hours=4) + timedelta(hours=1, minutes=30)
 
 
 def test_pause_resume_single_cycle_shifts_resolution_due_by_pause_duration():

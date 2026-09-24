@@ -71,8 +71,8 @@ def customer_reply_outcome(
     - "none": no automatic status change.
 
     A resolved ticket past its cooling-off window behaves like a closed one
-    (follow-up instead of reopen), even though nothing has flipped it to
-    closed yet — no sweep does that automatically as of this phase.
+    (follow-up instead of reopen) even before the worker's auto-close sweep
+    (every SWEEP_INTERVAL_SECONDS) has flipped it to closed.
     """
     if status is TicketStatus.pending:
         return "reopen"

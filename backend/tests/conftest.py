@@ -18,7 +18,13 @@ TEST_DATABASE_URL = f"{_base}/ticketing_test"
 MAINTENANCE_DATABASE_URL = f"{_base}/postgres".replace("+asyncpg", "")
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
-os.environ.setdefault("AI_PROVIDER", "fake")
+# Forced, not setdefault: an .env with AI_PROVIDER=gemini must never make
+# the test suite call the real API.
+os.environ["AI_PROVIDER"] = "fake"
+# A separate Redis DB, so events published by tests never reach the dev
+# stack's worker (which would try to triage a ticket id from the wrong DB).
+_redis_base, _, _ = os.environ.get("REDIS_URL", "redis://redis:6379/0").rpartition("/")
+os.environ["REDIS_URL"] = f"{_redis_base}/15"
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-prod-32-bytes-min")
 
 import asyncio

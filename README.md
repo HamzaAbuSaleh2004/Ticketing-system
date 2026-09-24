@@ -14,8 +14,10 @@ for requirements and [PLAN.md](PLAN.md) for the execution plan and progress.
 docker compose up -d --build
 ```
 
-No `.env` is required — the stack defaults to `AI_PROVIDER=fake` (deterministic, offline
-AI). Copy `.env.example` to `.env` and set `GEMINI_API_KEY` to use real Gemini instead.
+No `.env` is required: with no `GEMINI_API_KEY` the stack uses a deterministic, offline
+fake AI provider. Copy `.env.example` to `.env` and set `GEMINI_API_KEY` to use real Gemini
+instead (`AI_PROVIDER=auto` is the default), then restart so the KB is re-embedded. Check it
+end to end with `docker compose exec api python scripts/smoke_gemini.py`.
 
 - API: http://localhost:8000 (health: `GET /health`)
 - Frontend: http://localhost:5173

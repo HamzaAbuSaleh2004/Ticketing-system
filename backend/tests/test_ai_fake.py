@@ -7,7 +7,7 @@ async def test_fake_embedding_ranks_password_article_first():
     semantic, or fake-mode KB search can never return the right article."""
     provider = FakeProvider()
     article_texts = [f"{a['title']}\n\n{a['body']}" for a in KB_ARTICLES]
-    *article_embeddings, query_embedding = await provider.embed([*article_texts, "forgot my password"])
+    *article_embeddings, query_embedding = await provider.embed([*article_texts, "forgot my password"], task="query")
 
     similarities = [
         (article["slug"], sum(x * y for x, y in zip(query_embedding, embedding, strict=True)))

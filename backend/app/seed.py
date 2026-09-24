@@ -173,36 +173,36 @@ async def seed_categories(session: AsyncSession) -> None:
 
 async def seed_kb_articles(session: AsyncSession) -> None:
     provider = get_ai_provider()
+    existing = {
+        a.slug: a for a in await session.scalars(select(KnowledgeBaseArticle))
+    }
+
+    # Re-embed whenever the stored vector came from a different model (e.g.
+    # fake-mode vectors once GEMINI_API_KEY is added); otherwise query
+    # vectors from the new model get compared against stale ones.
+    stale: list[KnowledgeBaseArticle] = []
     for a in KB_ARTICLES:
-        existing = await session.scalar(
-            select(KnowledgeBaseArticle).where(KnowledgeBaseArticle.slug == a["slug"])
-        )
-        # Embed title + body (not body alone) so a query matching only the
-        # title still ranks the article well.
-        embed_text = f"{a['title']}\n\n{a['body']}"
+        article = existing.get(a["slug"])
+        if article is None:
+            article = KnowledgeBaseArticle(slug=a["slug"], title=a["title"], body=a["body"], tags=a["tags"])
+            session.add(article)
+        if article.embedding_model != provider.EMBEDDING_MODEL_ID:
+            stale.append(article)
 
-        if existing is None:
-            [embedding] = await provider.embed([embed_text])
-            session.add(
-                KnowledgeBaseArticle(
-                    slug=a["slug"],
-                    title=a["title"],
-                    body=a["body"],
-                    tags=a["tags"],
-                    embedding=embedding,
-                    embedding_model=provider.EMBEDDING_MODEL_ID,
-                )
-            )
-            continue
-
-        # Re-embed whenever the stored vector came from a different model
-        # (e.g. fake-mode vectors once GEMINI_API_KEY is added) — otherwise
-        # query vectors from the new model get compared against stale ones
-        # and search returns noise.
-        if existing.embedding_model != provider.EMBEDDING_MODEL_ID:
-            [embedding] = await provider.embed([embed_text])
-            existing.embedding = embedding
-            existing.embedding_model = provider.EMBEDDING_MODEL_ID
+    if stale:
+        # Title + body (not body alone), so a query matching only the title
+        # still ranks the article well.
+        texts = [f"{a.title}\n\n{a.body}" for a in stale]
+        try:
+            vectors = await provider.embed(texts, task="document")
+        except Exception:
+            # Don't block API startup on the AI provider (e.g. a bad key):
+            # articles stay unembedded/stale and are retried on the next start.
+            logger.exception("seed: embedding KB articles failed; KB search will be empty until re-seeded")
+        else:
+            for article, vector in zip(stale, vectors, strict=True):
+                article.embedding = vector
+                article.embedding_model = provider.EMBEDDING_MODEL_ID
 
     await session.commit()
 

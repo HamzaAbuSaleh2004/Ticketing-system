@@ -255,7 +255,8 @@ async def test_end_user_never_receives_internal_notes(client, db_session):
 
     as_customer = (await client.get(f"/tickets/{ticket_id}", headers=_auth(customer_token))).json()
     assert as_customer["comments"] == []
-    assert as_customer["audit_log"] is None
+    for agent_only in ("audit_log", "ai_triage", "sla_paused_total_seconds", "allowed_transitions"):
+        assert agent_only not in as_customer
 
     as_agent = (await client.get(f"/tickets/{ticket_id}", headers=_auth(agent_token))).json()
     assert len(as_agent["comments"]) == 1

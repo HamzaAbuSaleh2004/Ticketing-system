@@ -10,16 +10,17 @@ async def test_seed_kb_articles_idempotent_then_reembeds_on_model_change(db_sess
 
     articles = (await db_session.scalars(select(KnowledgeBaseArticle))).all()
     assert len(articles) == 5
-    assert all(a.embedding_model == "fake-hash-v1" for a in articles)
+    assert all(a.embedding_model == fake_module.FakeProvider.EMBEDDING_MODEL_ID for a in articles)
     first_pass = {a.slug: list(a.embedding) for a in articles}
 
     # Re-seeding with the same provider/model id is a no-op.
     original_embed = fake_module.FakeProvider.embed
     calls: list[list[str]] = []
 
-    async def counting_embed(self, texts):
-        calls.append(texts)
-        return await original_embed(self, texts)
+    async def counting_embed(self, texts, *, task):
+        assert task == "document"
+        calls.extend(texts)
+        return await original_embed(self, texts, task=task)
 
     monkeypatch.setattr(fake_module.FakeProvider, "embed", counting_embed)
 
@@ -30,11 +31,11 @@ async def test_seed_kb_articles_idempotent_then_reembeds_on_model_change(db_sess
 
     # PLAN.md Phase 3 follow-up: changing the provider's model id (e.g.
     # switching fake -> gemini) must re-embed every stale article.
-    monkeypatch.setattr(fake_module.FakeProvider, "EMBEDDING_MODEL_ID", "fake-hash-v2")
+    monkeypatch.setattr(fake_module.FakeProvider, "EMBEDDING_MODEL_ID", "fake-hash-test-bump")
 
     await seed_module.seed_kb_articles(db_session)
     assert len(calls) == 5
 
     reembedded = (await db_session.scalars(select(KnowledgeBaseArticle))).all()
     assert len(reembedded) == 5
-    assert all(a.embedding_model == "fake-hash-v2" for a in reembedded)
+    assert all(a.embedding_model == "fake-hash-test-bump" for a in reembedded)

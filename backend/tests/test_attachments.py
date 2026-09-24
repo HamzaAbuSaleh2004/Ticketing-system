@@ -100,3 +100,57 @@ async def test_end_user_cannot_upload_to_another_users_ticket(client):
         headers=_auth(other_token),
     )
     assert resp.status_code == 404
+
+
+async def test_download_is_scoped_and_internal_note_attachments_never_reach_end_users(client, db_session):
+    from tests.helpers import create_agent, login
+
+    owner_token = await _register(client, "dl-owner@example.com")
+    other_token = await _register(client, "dl-other@example.com")
+    await create_agent(db_session, email="dl-agent@example.com")
+    agent_token = await login(client, "dl-agent@example.com")
+    ticket_id = (
+        await client.post("/tickets", json={"subject": "Logs", "description": "see file"}, headers=_auth(owner_token))
+    ).json()["id"]
+
+    public = (
+        await client.post(
+            f"/tickets/{ticket_id}/attachments",
+            files={"file": ("../../etc/log.txt", b"public bytes", "text/plain")},
+            headers=_auth(owner_token),
+        )
+    ).json()
+    assert public["filename"] == "log.txt"
+
+    note = (
+        await client.post(
+            f"/tickets/{ticket_id}/comments",
+            json={"body": "internal analysis", "is_internal_note": True},
+            headers=_auth(agent_token),
+        )
+    ).json()["comment"]
+    internal = (
+        await client.post(
+            f"/tickets/{ticket_id}/attachments",
+            files={"file": ("analysis.txt", b"internal bytes", "text/plain")},
+            data={"comment_id": str(note["id"])},
+            headers=_auth(agent_token),
+        )
+    ).json()
+
+    resp = await client.get(f"/attachments/{public['id']}", headers=_auth(owner_token))
+    assert resp.status_code == 200
+    assert resp.content == b"public bytes"
+    assert resp.headers["content-disposition"].startswith("attachment;")
+    assert 'filename="log.txt"' in resp.headers["content-disposition"]
+    assert resp.headers["x-content-type-options"] == "nosniff"
+
+    assert (await client.get(f"/attachments/{public['id']}", headers=_auth(other_token))).status_code == 404
+    assert (await client.get(f"/attachments/{internal['id']}", headers=_auth(owner_token))).status_code == 404
+    assert (await client.get(f"/attachments/{internal['id']}", headers=_auth(agent_token))).status_code == 200
+    assert (await client.get(f"/attachments/{public['id']}")).status_code == 401
+
+    as_owner = (await client.get(f"/tickets/{ticket_id}", headers=_auth(owner_token))).json()
+    assert [a["id"] for a in as_owner["attachments"]] == [public["id"]]
+    as_agent = (await client.get(f"/tickets/{ticket_id}", headers=_auth(agent_token))).json()
+    assert {a["id"] for a in as_agent["attachments"]} == {public["id"], internal["id"]}

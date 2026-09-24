@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.models.enums import TicketPriority, TicketStatus
+from app.schemas.ai import TriageField
 
 
 class TicketCreate(BaseModel):
@@ -20,6 +21,11 @@ class TicketPatch(BaseModel):
     priority: TicketPriority | None = None
     category: str | None = None
     escalate: bool | None = None
+    # Accept these fields of the AI triage suggestion: category/priority are
+    # set to the suggested value; every accepted field is recorded in
+    # ai_triage.accepted_fields. Setting category/priority directly records
+    # "accepted" or "overridden" depending on whether it matches.
+    ai_accept: list[TriageField] | None = None
 
 
 class CommentCreate(BaseModel):
@@ -40,6 +46,7 @@ class CommentOut(BaseModel):
 
 class AttachmentOut(BaseModel):
     id: int
+    comment_id: int | None
     filename: str
     content_type: str
     created_at: datetime
@@ -66,6 +73,7 @@ class TicketListItem(BaseModel):
     requester_id: int
     assignee_id: int | None
     escalated: bool
+    ai_summary: str | None
     sla_response_due: datetime | None
     sla_resolution_due: datetime | None
     created_at: datetime
@@ -81,23 +89,31 @@ class TicketListResponse(BaseModel):
     page_size: int
 
 
-class TicketDetail(TicketListItem):
+class TicketDetailPublic(TicketListItem):
+    """What an end user gets. Agent-only fields (the AI triage with its
+    response draft, pause accounting, legal transitions, audit trail) are
+    absent from the model, not just nulled."""
+
     description: str
     sla_paused_at: datetime | None
-    sla_paused_total_seconds: int
     first_responded_at: datetime | None
     parent_ticket_id: int | None
-    ai_triage: dict | None
-    ai_summary: str | None
     resolved_at: datetime | None
     closed_at: datetime | None
     comments: list[CommentOut] = []
     attachments: list[AttachmentOut] = []
-    # Only populated for agents/admins.
-    audit_log: list[AuditLogOut] | None = None
+
+
+class TicketDetail(TicketDetailPublic):
+    """Agent/admin view. The extra fields have no defaults, so a public
+    payload can never validate as this model."""
+
+    sla_paused_total_seconds: int
+    ai_triage: dict | None
+    audit_log: list[AuditLogOut]
     # Legal next statuses from the current one (domain/lifecycle.py), so the
     # UI's status control only ever offers a move the API will accept.
-    allowed_transitions: list[TicketStatus] = []
+    allowed_transitions: list[TicketStatus]
 
 
 class CommentCreateResult(BaseModel):

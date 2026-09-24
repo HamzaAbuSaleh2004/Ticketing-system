@@ -19,24 +19,18 @@ def recompute_due_on_priority_change(
     response_minutes: int,
     resolution_minutes: int,
     first_responded_at: datetime | None,
-    paused_at: datetime | None,
+    paused_total_seconds: int,
     current_response_due: datetime | None,
-    current_resolution_due: datetime | None,
-) -> tuple[datetime | None, datetime | None]:
-    """Recomputes both due dates from created_at, unless the corresponding
-    clock is no longer live: the response due date is frozen once
-    first_responded_at is set, and the resolution due date is left alone
-    while paused (recomputing it from created_at would erase the pause)."""
+) -> tuple[datetime | None, datetime]:
+    """The response due date is frozen once first_responded_at is set. The
+    resolution due date always includes completed pause time; if the ticket
+    is paused right now, leave_pending adds the current pause on resume."""
     response_due = (
         current_response_due
         if first_responded_at is not None
         else created_at + timedelta(minutes=response_minutes)
     )
-    resolution_due = (
-        current_resolution_due
-        if paused_at is not None
-        else created_at + timedelta(minutes=resolution_minutes)
-    )
+    resolution_due = created_at + timedelta(minutes=resolution_minutes, seconds=paused_total_seconds)
     return response_due, resolution_due
 
 
