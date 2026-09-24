@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+from app import models  # noqa: F401 -- registers models on Base.metadata
 from app.redis_client import get_redis
 
 logging.basicConfig(level=logging.INFO)

@@ -16,6 +16,7 @@ dependencies = [
     "redis>=5.2",
     "httpx>=0.28",
     "python-multipart>=0.0.17",
+    "pgvector>=0.3",
 ]
 
 [dependency-groups]
