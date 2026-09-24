@@ -388,10 +388,59 @@ Each phase ends with **Verify**: commands the executor must actually run, with t
     - The unencoded article slug and the duplicated query threshold → encoded + `MIN_QUERY`.
 
 ### Phase 8 — Agent console (dense, data-forward)
-- [ ] Nav rail (Queue, Dashboard; Admin if admin). Queue = filter chips (status, priority, assignee incl. "Mine"/"Unassigned", category) + a dense table with ID (tabular figures), subject + AI one-liner, requester, priority, status, **SLA indicator**, assignee, updated. The URL holds the filter state. Keyboard: `j/k` to move, `Enter` to open.
-- [ ] Ticket detail (right pane or route): the thread with internal notes visually distinct (tertiary-container tint + "Internal" label, not color alone). The composer has a Reply / Internal note toggle. Side panel: status control that **only offers legal next transitions** (from the API), assignee picker, priority, category, Escalate button, and an **AI triage panel** with the suggestions, per-field Accept/Override, a "Use draft" button that inserts `suggested_response_draft` into the composer, and "Re-run triage". Audit trail in a collapsible section.
-- [ ] `SlaIndicator`: countdown in tabular Roboto Flex with ring progress. States: on track / at risk (tertiary) / breached (error) / **paused** (outlined + "Paused" text), and none when resolved/closed. All states carry text, not just color.
+- [x] Nav rail (Queue, Dashboard; Admin if admin). Queue = filter chips (status, priority, assignee incl. "Mine"/"Unassigned", category) + a dense table with ID (tabular figures), subject + AI one-liner, requester, priority, status, **SLA indicator**, assignee, updated. The URL holds the filter state. Keyboard: `j/k` to move, `Enter` to open.
+- [x] Ticket detail (right pane or route): the thread with internal notes visually distinct (tertiary-container tint + "Internal" label, not color alone). The composer has a Reply / Internal note toggle. Side panel: status control that **only offers legal next transitions** (from the API), assignee picker, priority, category, Escalate button, and an **AI triage panel** with the suggestions, per-field Accept/Override, a "Use draft" button that inserts `suggested_response_draft` into the composer, and "Re-run triage". Audit trail in a collapsible section.
+- [x] `SlaIndicator`: countdown in tabular Roboto Flex with ring progress. States: on track / at risk (tertiary) / breached (error) / **paused** (outlined + "Paused" text), and none when resolved/closed. All states carry text, not just color.
 - **Verify:** Playwright: an agent opens the seeded ticket, walks it through the full lifecycle via the UI, and adds an internal note. The end-user session doesn't see the note. Screenshot the queue at 1280 and 1600 and critique the density against the end-user portal.
+
+  **Evidence (2026-09-24):**
+  - Backend for the console:
+    - Agent-only `TicketQueueItem` rows (requester/assignee names, `sla_paused_at`, `first_responded_at`, `sla_paused_total_seconds`). End users still get the public `TicketListItem`.
+    - A repeatable `status` filter and a `sla_due` sort: the first-reply clock while unanswered, then resolution; paused tickets sort by where the deadline would be if resumed now.
+    - `requester_name`/`requester_email`/`assignee_name` on the agent detail, `actor_name` on audit rows, and `GET /users/staff` (agents/admins only).
+    - Tests: `test_agent_queue_rows_carry_names_and_clock_inputs_end_users_dont` and `test_sla_due_sort_puts_long_paused_tickets_after_running_urgent_ones`. `pytest` → **134 passed**, and ruff is clean.
+  - Console (`frontend/src/portals/agent/`):
+    - `QueuePage` + `QueueToolbar`: Status/Priority/Assignee (Anyone, Mine, Unassigned, each agent)/Category filter chips with menus, plus search. All filter state lives in the URL.
+    - `QueueTable`: 36px rows with ID in tabular figures, subject plus the AI one-liner when it differs from the subject, requester, priority, status, **SLA indicator**, assignee, and a compact updated time. `j`/`k`/`Enter` move and open, and the selection is kept by ticket id across the 20s refresh.
+    - `AgentTicketPage`: 3 panes at ≥ 1200, 2 at 840–1199, 1 below. The thread shows internal notes as a tertiary tint with a bar and a lock-icon "Internal note" label. The Reply / Internal note composer says who will see the message.
+    - `TicketSidePanel`: the status select offers only `allowed_transitions`, with "open" guarded until someone is assigned; assignee plus "Take it"; priority; category; Escalate.
+    - `AiTriagePanel`: per-field Accept with Applied/Accepted/Overridden/"Changed since" state, "Use draft" into the composer (never discards typed text or makes a note public), and Re-run.
+    - `AuditTrail`: a collapsible history with actor names, and "System" for null actors.
+  - `SlaIndicator` (`components/SlaIndicator.tsx`, logic in `lib/sla.ts`): a ring plus a tabular countdown. States are on track (primary), at risk <25% (tertiary + "At risk"), breached (error + "Breached", "12m over"), paused (dashed outline ring + "Paused", with the countdown frozen at the pause point), and none when resolved or closed. It has `role="img"` with a sentence label, and one shared 15s ticker drives every countdown.
+  - `vitest` → **22 passed**. `src/lib/agent.test.ts` covers the response → resolution clock switch, the at-risk and breached thresholds, pause-credit in the window, frozen while paused (never "breached"), none when resolved or closed, duration formatting, and `statusOptions` (only the API's legal moves; the triaged→open guard).
+  - Playwright `e2e/phase8-agent.spec.ts` → **3 passed**:
+    - A realistic queue is seeded through the API: 6 tickets from a second customer across urgent/high/normal/low, one pending and one assigned.
+    - **The agent walks a ticket through the whole lifecycle in the UI:**
+      - It opens from the queue, after checking that the filter chip writes `?priority=high` to the URL and that `j`/`k` select.
+      - It accepts the AI category (the panel shows "Accepted") and uses the draft (the composer is filled).
+      - "Move to open" is disabled until the agent clicks "Take it". Then: open → in progress → sends the drafted public reply.
+      - It adds an internal note, which renders with the "Internal note" label.
+      - Pending → the side panel shows "Paused". Then in progress → resolved (SLA "None") → closed.
+      - History shows "System ran AI triage".
+    - **The customer never sees the note:** the API's `GET /tickets/:id` as `user1` has no internal comment, and a separate customer browser context shows the agent's public reply and "Closed" but not the note text.
+    - Dark-mode captures.
+  - Screenshots in `docs/screenshots/phase-8/`: `queue-1280`, `queue-1600`, `ticket-pending-1280`, `ticket-pending-1600`, `queue-dark-1600`, `ticket-dark-1600`.
+  - Screenshot critique, all fixed:
+    - Internal notes on the generated `tertiaryContainer` were a heavy dark-violet block, so they're now a tint + bar + label.
+    - Selects showed the menu's two-line text inside the field, so they now use `renderValue`.
+    - The "Updated" column truncated ("7 minutes …"), so it now shows a compact "7m" with the full time in the title.
+    - The AI panel still said "Applied" after escalation changed the priority, so it now says "Changed since".
+  - Density against the end-user portal: 14px body vs 16px, 36px rows vs ~72px, full-bleed 3 panes vs an 880px column, 8px panes vs 28–32px containers, a layered surface ladder vs flat surfaces with one saturated moment, ROND 0 vs 60. Table in the audit.
+  - **Found and fixed:**
+    - A crash on leaving the queue ("destroy is not a function"). An expression-bodied `useEffect(() => el.scrollIntoView())` returned a Promise, because current Chromium returns one from `scrollIntoView`, and React treated it as the cleanup. All effects are now block-bodied.
+    - The M3 48dp touch target added to `IconButton`.
+  - **`material-3` audit: [docs/audits/phase-8-md3.md](docs/audits/phase-8-md3.md), 84/100, every category ≥ 7** (Motion 7, Components, Layout, Navigation, Typography and Accessibility 8). axe WCAG 2.2 AA → **0 violations** on the queue and the workspace (with the note composer open), in light and dark (`e2e/phase8-a11y.spec.ts`). Also: no hex/rgba outside `theme/`, every radius a token, and `boxShadow` used only for inset selection bars.
+  - Code review (`code-review` at high) found 10 issues, all fixed:
+    - A transient refetch error replaced the loaded ticket or queue with an error screen.
+    - The shared clock was stale after idling.
+    - Paused tickets sorted as most overdue.
+    - Queues weren't refreshed after a reply.
+    - The "Paused so far" row never rendered.
+    - The keyboard selection was tracked by index.
+    - `j`/`k` on a focused control switched tickets and lost the draft.
+    - "Use draft" overwrote the text and flipped a note to public.
+    - A redundant detail refetch after each PATCH.
+    - Duplicated category-name and ticket-ref helpers.
 
 ### Phase 9 — Analytics dashboard + Admin
 - [ ] `GET /analytics/summary?from&to`: ticket volume per day, median/avg first-response time, median/avg resolution time (excluding paused time), backlog by status, SLA breach count. SQL aggregates, not Python loops.

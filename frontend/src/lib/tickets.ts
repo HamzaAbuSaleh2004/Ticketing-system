@@ -76,5 +76,15 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
   return "just now";
 }
 
+/** "3m", "5h", "2d": for dense columns already headed "Updated". */
+export function compactAgo(iso: string, now: Date = new Date()): string {
+  const s = Math.max(0, (now.getTime() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "now";
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86_400) return `${Math.floor(s / 3600)}h`;
+  if (s < 30 * 86_400) return `${Math.floor(s / 86_400)}d`;
+  return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" });
+}
+
 export const absoluteTime = (iso: string) =>
   new Date(iso).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });

@@ -59,6 +59,8 @@ class AttachmentOut(BaseModel):
 class AuditLogOut(BaseModel):
     id: int
     actor_id: int | None
+    # None for the system (AI triage, SLA sweeps): actor_id is NULL.
+    actor_name: str | None = None
     action: str
     diff_json: dict | None
     created_at: datetime
@@ -91,6 +93,24 @@ class TicketListResponse(BaseModel):
     page_size: int
 
 
+class TicketQueueItem(TicketListItem):
+    """Agent queue row: adds who's involved and the SLA clock inputs (pause
+    accounting is agent-only, like on the detail)."""
+
+    requester_name: str
+    assignee_name: str | None
+    sla_paused_at: datetime | None
+    first_responded_at: datetime | None
+    sla_paused_total_seconds: int
+
+
+class TicketQueueResponse(BaseModel):
+    items: list[TicketQueueItem]
+    total: int
+    page: int
+    page_size: int
+
+
 class TicketDetailPublic(TicketListItem):
     """What an end user gets. Agent-only fields (the AI triage with its
     response draft, pause accounting, legal transitions, audit trail) are
@@ -115,6 +135,9 @@ class TicketDetail(TicketDetailPublic):
 
     sla_paused_total_seconds: int
     ai_triage: dict | None
+    requester_name: str
+    requester_email: str
+    assignee_name: str | None
     audit_log: list[AuditLogOut]
     # Legal next statuses from the current one (domain/lifecycle.py), so the
     # UI's status control only ever offers a move the API will accept.

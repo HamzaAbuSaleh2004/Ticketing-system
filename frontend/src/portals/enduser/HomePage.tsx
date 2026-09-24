@@ -2,7 +2,6 @@ import AddOutlined from "@mui/icons-material/AddOutlined";
 import { Box, Button, Stack, Typography } from "@mui/material";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
 import { MIN_QUERY, useKbSearch, useMyTickets } from "../../api/hooks";
-import { sys } from "../../theme/scheme";
 import { KbAnswerPanel } from "./KbAnswerPanel";
 import { RequestList } from "./RequestList";
 import { SearchBar } from "./SearchBar";
@@ -39,7 +38,7 @@ export function HomePage() {
           component={RouterLink}
           to="/requests/new"
           startIcon={<AddOutlined />}
-          sx={{ bgcolor: sys("secondaryContainer"), color: sys("onSecondaryContainer"), "&:hover": { bgcolor: sys("secondaryContainer") } }}
+          variant="tonal"
         >
           New request
         </Button>

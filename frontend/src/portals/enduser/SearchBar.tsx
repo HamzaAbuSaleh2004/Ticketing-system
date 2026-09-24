@@ -9,7 +9,9 @@ import { typescale } from "../../theme/tokens";
  * Enter rather than per keystroke, so each Gemini call is intentional. */
 export function SearchBar({ value, onSearch }: { value: string; onSearch: (q: string) => void }) {
   const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
 
   function submit(e: FormEvent) {
     e.preventDefault();

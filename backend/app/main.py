@@ -13,6 +13,7 @@ from app.routers.auth import router as auth_router
 from app.routers.categories import router as categories_router
 from app.routers.kb import router as kb_router
 from app.routers.tickets import router as tickets_router
+from app.routers.users import router as users_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ app.include_router(tickets_router)
 app.include_router(attachments_router)
 app.include_router(kb_router)
 app.include_router(categories_router)
+app.include_router(users_router)
 
 
 @app.get("/health")

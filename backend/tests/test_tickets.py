@@ -355,3 +355,63 @@ async def test_customers_see_staff_first_names_and_reopen_window(client, db_sess
         assert (await client.patch(f"/tickets/{tid}", json=patch, headers=_auth(agent_token))).status_code == 200
     resolved = (await client.get(f"/tickets/{tid}", headers=_auth(customer_token))).json()
     assert datetime.fromisoformat(resolved["reopen_until"]) == BASE + timedelta(hours=72)
+
+
+async def test_agent_queue_rows_carry_names_and_clock_inputs_end_users_dont(client, db_session, monkeypatch):
+    _freeze(monkeypatch, BASE)
+    customer_token, _ = await _register(client, "queue-customer@example.com", name="Quinn Customer")
+    agent = await _create_agent(db_session, email="queue-agent@example.com")
+    agent_token = await _login(client, "queue-agent@example.com", "Secret123!")
+    first = (await client.post("/tickets", json={"subject": "a", "description": "d"}, headers=_auth(customer_token))).json()["id"]
+    second = (await client.post("/tickets", json={"subject": "b", "description": "d"}, headers=_auth(customer_token))).json()["id"]
+    for patch in ({"status": "triaged"}, {"assignee_id": agent.id}, {"status": "open"}, {"status": "in_progress"}):
+        await client.patch(f"/tickets/{first}", json=patch, headers=_auth(agent_token))
+    await client.patch(f"/tickets/{second}", json={"priority": "urgent"}, headers=_auth(agent_token))
+
+    queue = (await client.get("/tickets?status=in_progress&status=new&sort=sla_due", headers=_auth(agent_token))).json()
+    rows = {r["id"]: r for r in queue["items"]}
+    assert set(rows) == {first, second}
+    assert queue["items"][0]["id"] == second  # urgent: its 15-minute response clock comes first
+    assert rows[first]["requester_name"] == "Quinn Customer"
+    assert rows[first]["assignee_name"] == "Agent"
+    assert rows[first]["sla_paused_total_seconds"] == 0
+
+    mine = (await client.get("/tickets", headers=_auth(customer_token))).json()["items"]
+    assert {"requester_name", "assignee_name", "sla_paused_total_seconds"}.isdisjoint(mine[0])
+
+    detail = (await client.get(f"/tickets/{first}", headers=_auth(agent_token))).json()
+    assert (detail["requester_name"], detail["requester_email"], detail["assignee_name"]) == (
+        "Quinn Customer", "queue-customer@example.com", "Agent",
+    )
+    assert detail["audit_log"][0]["actor_name"] == "Quinn Customer"
+
+    staff = (await client.get("/users/staff", headers=_auth(agent_token))).json()
+    assert [s["email"] for s in staff] == ["queue-agent@example.com"]
+    assert (await client.get("/users/staff", headers=_auth(customer_token))).status_code == 403
+
+
+async def test_sla_due_sort_puts_long_paused_tickets_after_running_urgent_ones(client, db_session, monkeypatch):
+    from app.models import Ticket
+
+    customer_token, _ = await _register(client, "sort-customer@example.com")
+    agent = await _create_agent(db_session, email="sort-agent@example.com")
+    agent_token = await _login(client, "sort-agent@example.com", "Secret123!")
+    now = datetime.now(UTC)
+    requester_id = (await client.get("/auth/me", headers=_auth(customer_token))).json()["id"]
+    # Paused for 3 days: its stored due date is long past, but nobody can act on it.
+    paused = Ticket(
+        subject="waiting on customer", description="d", status="pending", priority="normal",
+        requester_id=requester_id, assignee_id=agent.id, created_at=now - timedelta(days=4),
+        sla_response_due=now - timedelta(days=4) + timedelta(hours=4), first_responded_at=now - timedelta(days=4),
+        sla_resolution_due=now - timedelta(days=2), sla_paused_at=now - timedelta(days=3),
+    )
+    running = Ticket(
+        subject="urgent and running", description="d", status="in_progress", priority="urgent",
+        requester_id=requester_id, assignee_id=agent.id, created_at=now - timedelta(minutes=5),
+        sla_response_due=now + timedelta(minutes=10), sla_resolution_due=now + timedelta(hours=4),
+    )
+    db_session.add_all([paused, running])
+    await db_session.commit()
+
+    queue = (await client.get("/tickets?sort=sla_due", headers=_auth(agent_token))).json()["items"]
+    assert [t["subject"] for t in queue] == ["urgent and running", "waiting on customer"]

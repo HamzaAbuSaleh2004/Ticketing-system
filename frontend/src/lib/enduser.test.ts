@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseAnswer } from "./citations";
-import { CUSTOMER_STATUS, relativeTime, replyMode, ticketRef } from "./tickets";
+import { CUSTOMER_STATUS, compactAgo, relativeTime, replyMode, ticketRef } from "./tickets";
 
 describe("replyMode (mirrors the backend's customer_reply_outcome)", () => {
   const now = new Date("2026-05-10T12:00:00Z");
@@ -55,5 +55,8 @@ describe("formatting", () => {
     expect(relativeTime("2026-05-10T10:00:00Z", now)).toBe("2 hours ago");
     expect(relativeTime("2026-05-09T12:00:00Z", now)).toBe("yesterday");
     expect(relativeTime("2026-05-10T11:59:50Z", now)).toBe("just now");
+    expect(compactAgo("2026-05-10T11:53:00Z", now)).toBe("7m");
+    expect(compactAgo("2026-05-10T07:00:00Z", now)).toBe("5h");
+    expect(compactAgo("2026-05-08T12:00:00Z", now)).toBe("2d");
   });
 });

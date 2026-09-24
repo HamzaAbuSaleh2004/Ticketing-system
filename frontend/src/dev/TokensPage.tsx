@@ -105,7 +105,7 @@ export function TokensPage() {
         <Button variant="contained">Filled</Button>
         <Button variant="outlined">Outlined</Button>
         <Button variant="text">Text</Button>
-        <Button sx={{ bgcolor: sys("secondaryContainer"), color: sys("onSecondaryContainer") }}>Tonal</Button>
+        <Button variant="tonal">Tonal</Button>
         <Chip label="Filter chip" />
         <Chip label="Outlined chip" variant="outlined" />
         <TextField label="Text field" size="small" />

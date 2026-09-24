@@ -2,6 +2,10 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { api } from "./client";
 import type {
   Attachment,
+  TicketDetail,
+  TicketPatch,
+  TicketQueue,
+  User,
   Category,
   CommentCreateResult,
   KbArticle,
@@ -95,9 +99,50 @@ export function useReply(ticketId: number) {
     mutationFn: (body: { body: string; is_internal_note?: boolean }) =>
       api<CommentCreateResult>(`/tickets/${ticketId}/comments`, { method: "POST", body }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: keys.ticket(ticketId) });
-      qc.invalidateQueries({ queryKey: keys.tickets, exact: true });
+      // The reply isn't returned with the ticket, so refetch it, the
+      // customer list and every agent queue (first reply switches the SLA clock).
+      qc.invalidateQueries({ queryKey: keys.tickets });
     },
+  });
+}
+
+export function useQueue(query: string) {
+  return useQuery({
+    queryKey: ["tickets", "queue", query],
+    queryFn: () => api<TicketQueue>(`/tickets?${query}`),
+    placeholderData: keepPreviousData,
+    // The queue is shared; keep it current without a manual refresh.
+    refetchInterval: 20_000,
+  });
+}
+
+export function useStaff() {
+  return useQuery({ queryKey: ["staff"], queryFn: () => api<User[]>("/users/staff"), staleTime: 5 * 60_000 });
+}
+
+export function useAgentTicket(id: number) {
+  return useTicket<TicketDetail>(id, 20_000);
+}
+
+/** Store the fresh detail and refresh lists, without refetching the detail we just wrote. */
+function writeTicket(qc: ReturnType<typeof useQueryClient>, id: number, ticket: TicketDetail) {
+  qc.setQueryData(keys.ticket(id), ticket);
+  qc.invalidateQueries({ queryKey: keys.tickets, predicate: (q) => q.queryKey[1] !== id });
+}
+
+export function usePatchTicket(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: TicketPatch) => api<TicketDetail>(`/tickets/${id}`, { method: "PATCH", body: patch }),
+    onSuccess: (ticket) => writeTicket(qc, id, ticket),
+  });
+}
+
+export function useRerunTriage(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<TicketDetail>(`/tickets/${id}/ai-triage`, { method: "POST" }),
+    onSuccess: (ticket) => writeTicket(qc, id, ticket),
   });
 }
 

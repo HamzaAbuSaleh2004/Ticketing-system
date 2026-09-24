@@ -3,9 +3,9 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import ColumnElement, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import InstrumentedAttribute, selectinload
+from sqlalchemy.orm import aliased, selectinload
 
 from app.ai import get_ai_provider
 from app.auth.dependencies import current_user, require_role
@@ -41,6 +41,8 @@ from app.schemas.ticket import (
     TicketListItem,
     TicketListResponse,
     TicketPatch,
+    TicketQueueItem,
+    TicketQueueResponse,
 )
 from app.services.tickets import escalate, get_policy, lock_ticket, set_priority
 from app.services.triage import record_ai_field_decisions, triage_ticket
@@ -57,13 +59,28 @@ ALLOWED_ATTACHMENT_CONTENT_TYPES = {
     "text/plain",
 }
 
-_SORTABLE_COLUMNS: dict[str, InstrumentedAttribute] = {
+_SORTABLE_COLUMNS: dict[str, ColumnElement] = {
     "id": Ticket.id,
     "created_at": Ticket.created_at,
     "updated_at": Ticket.updated_at,
     "priority": Ticket.priority,
     "status": Ticket.status,
     "sla_resolution_due": Ticket.sla_resolution_due,
+    # The next deadline that matters: first reply while unanswered, then
+    # resolution. A paused ticket's stored due date is frozen (it only moves
+    # on resume), so it sorts by where the deadline would be if resumed now,
+    # instead of floating to the top as "overdue" while nobody can act.
+    "sla_due": case(
+        (
+            Ticket.first_responded_at.is_(None),
+            func.least(Ticket.sla_response_due, Ticket.sla_resolution_due),
+        ),
+        (
+            Ticket.sla_paused_at.is_not(None),
+            Ticket.sla_resolution_due + (func.now() - Ticket.sla_paused_at),
+        ),
+        else_=Ticket.sla_resolution_due,
+    ),
 }
 
 _AGENT_ROLES = (UserRole.agent, UserRole.admin)
@@ -123,16 +140,27 @@ async def _build_ticket_detail(
     if not agent:
         return public
 
-    audit_rows = await session.scalars(
-        select(AuditLog)
-        .where(AuditLog.entity_type == "ticket", AuditLog.entity_id == ticket.id)
-        .order_by(AuditLog.created_at, AuditLog.id)
-    )
+    audit_rows = (
+        await session.execute(
+            select(AuditLog, User.name)
+            .outerjoin(User, User.id == AuditLog.actor_id)
+            .where(AuditLog.entity_type == "ticket", AuditLog.entity_id == ticket.id)
+            .order_by(AuditLog.created_at, AuditLog.id)
+        )
+    ).all()
+    requester = await session.get(User, ticket.requester_id)
+    assignee = await session.get(User, ticket.assignee_id) if ticket.assignee_id else None
     return TicketDetail(
         **public.model_dump(),
         sla_paused_total_seconds=ticket.sla_paused_total_seconds,
         ai_triage=ticket.ai_triage,
-        audit_log=[AuditLogOut.model_validate(row) for row in audit_rows],
+        requester_name=requester.name,
+        requester_email=requester.email,
+        assignee_name=assignee.name if assignee else None,
+        audit_log=[
+            AuditLogOut.model_validate(row).model_copy(update={"actor_name": name})
+            for row, name in audit_rows
+        ],
         allowed_transitions=sorted(allowed_next_statuses(ticket.status), key=lambda s: s.value),
     )
 
@@ -145,7 +173,7 @@ def _comment_out(comment: TicketComment, viewer: User) -> CommentOut:
     return out
 
 
-def _parse_sort(sort: str) -> tuple[InstrumentedAttribute, bool]:
+def _parse_sort(sort: str) -> tuple[ColumnElement, bool]:
     desc = sort.startswith("-")
     key = sort[1:] if desc else sort
     column = _SORTABLE_COLUMNS.get(key)
@@ -197,9 +225,10 @@ async def create_ticket(
     return await _build_ticket_detail(session, ticket, user)
 
 
-@router.get("", response_model=TicketListResponse)
+@router.get("", response_model=TicketQueueResponse | TicketListResponse)
 async def list_tickets(
-    status_filter: TicketStatus | None = Query(None, alias="status"),
+    # Repeatable: ?status=open&status=pending.
+    status_filter: list[TicketStatus] | None = Query(None, alias="status"),
     priority: TicketPriority | None = None,
     assignee: str | None = None,
     category: str | None = None,
@@ -209,12 +238,12 @@ async def list_tickets(
     page_size: int = Query(20, ge=1, le=100),
     user: User = Depends(current_user),
     session: AsyncSession = Depends(get_db),
-) -> TicketListResponse:
+) -> TicketQueueResponse | TicketListResponse:
     conditions = []
     if user.role == UserRole.end_user:
         conditions.append(Ticket.requester_id == user.id)
-    if status_filter is not None:
-        conditions.append(Ticket.status == status_filter)
+    if status_filter:
+        conditions.append(Ticket.status.in_(status_filter))
     if priority is not None:
         conditions.append(Ticket.priority == priority)
     if category is not None:
@@ -239,22 +268,48 @@ async def list_tickets(
 
     sort_column, sort_desc = _parse_sort(sort)
 
-    stmt = select(Ticket)
+    requester = aliased(User)
+    assignee = aliased(User)
+    stmt = (
+        select(Ticket, requester.name, assignee.name)
+        .join(requester, requester.id == Ticket.requester_id)
+        .outerjoin(assignee, assignee.id == Ticket.assignee_id)
+    )
     count_stmt = select(func.count()).select_from(Ticket)
     for condition in conditions:
         stmt = stmt.where(condition)
         count_stmt = count_stmt.where(condition)
     stmt = (
-        stmt.order_by(sort_column.desc() if sort_desc else sort_column.asc(), Ticket.id.desc())
+        stmt.order_by(
+            sort_column.desc().nulls_last() if sort_desc else sort_column.asc().nulls_last(),
+            Ticket.id.desc(),
+        )
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
 
     total = await session.scalar(count_stmt) or 0
-    tickets = (await session.scalars(stmt)).all()
+    rows = (await session.execute(stmt)).all()
 
-    return TicketListResponse(
-        items=[TicketListItem.model_validate(t) for t in tickets],
+    if not _is_agent(user):
+        return TicketListResponse(
+            items=[TicketListItem.model_validate(t) for t, _, _ in rows],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+    return TicketQueueResponse(
+        items=[
+            TicketQueueItem(
+                **TicketListItem.model_validate(t).model_dump(),
+                requester_name=requester_name,
+                assignee_name=assignee_name,
+                sla_paused_at=t.sla_paused_at,
+                first_responded_at=t.first_responded_at,
+                sla_paused_total_seconds=t.sla_paused_total_seconds,
+            )
+            for t, requester_name, assignee_name in rows
+        ],
         total=total,
         page=page,
         page_size=page_size,

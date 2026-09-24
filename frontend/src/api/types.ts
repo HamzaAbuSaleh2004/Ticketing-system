@@ -69,6 +69,54 @@ export type TicketDetailPublic = TicketListItem & {
   attachments: Attachment[];
 };
 
+export type TicketQueueItem = TicketListItem & {
+  requester_name: string;
+  assignee_name: string | null;
+  sla_paused_at: string | null;
+  first_responded_at: string | null;
+  sla_paused_total_seconds: number;
+};
+
+export type TicketQueue = { items: TicketQueueItem[]; total: number; page: number; page_size: number };
+
+export type AuditEntry = {
+  id: number;
+  actor_id: number | null;
+  actor_name: string | null;
+  action: string;
+  diff_json: { before?: Record<string, unknown>; after?: Record<string, unknown>; [k: string]: unknown } | null;
+  created_at: string;
+};
+
+export type TriageField = "category" | "priority" | "one_line_summary" | "suggested_response_draft";
+export type FieldDecision = "auto" | "accepted" | "overridden";
+
+export type AiTriage = {
+  suggestion: { category: string; priority: TicketPriority; one_line_summary: string; suggested_response_draft: string };
+  model: string;
+  generated_at: string;
+  accepted_fields: Partial<Record<TriageField, FieldDecision>>;
+};
+
+export type TicketDetail = TicketDetailPublic & {
+  sla_paused_total_seconds: number;
+  ai_triage: AiTriage | null;
+  requester_name: string;
+  requester_email: string;
+  assignee_name: string | null;
+  audit_log: AuditEntry[];
+  allowed_transitions: TicketStatus[];
+};
+
+export type TicketPatch = Partial<{
+  status: TicketStatus;
+  assignee_id: number | null;
+  priority: TicketPriority;
+  category: string | null;
+  escalate: boolean;
+  ai_accept: TriageField[];
+}>;
+
 export type CommentCreateResult = { comment: Comment | null; follow_up_ticket_id: number | null };
 
 export type KbSource = { id: number; title: string; slug: string; snippet: string };

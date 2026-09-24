@@ -5,6 +5,8 @@ import { RegisterPage } from "./auth/RegisterPage";
 import { RoleGate } from "./auth/RoleGate";
 import { TokensPage } from "./dev/TokensPage";
 import { AgentShell } from "./portals/agent/AgentShell";
+import { AgentTicketPage } from "./portals/agent/AgentTicketPage";
+import { QueuePage } from "./portals/agent/QueuePage";
 import { ArticlePage } from "./portals/enduser/ArticlePage";
 import { EndUserShell } from "./portals/enduser/EndUserShell";
 import { HomePage } from "./portals/enduser/HomePage";
@@ -25,6 +27,11 @@ function Placeholder({ title }: { title: string }) {
 function RequestRoute() {
   const { id } = useParams();
   return <RequestPage key={id} />;
+}
+
+function AgentTicketRoute() {
+  const { id } = useParams();
+  return <AgentTicketPage key={id} />;
 }
 
 function NotFound() {
@@ -64,7 +71,8 @@ const routes: RouteObject[] = [
       </RoleGate>
     ),
     children: [
-      { path: "/agent", element: <Placeholder title="Queue" /> },
+      { path: "/agent", element: <QueuePage /> },
+      { path: "/agent/tickets/:id", element: <AgentTicketRoute /> },
       { path: "/agent/dashboard", element: <Placeholder title="Dashboard" /> },
       {
         element: (

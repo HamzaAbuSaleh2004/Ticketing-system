@@ -34,6 +34,12 @@ declare module "@mui/material/styles" {
   }
 }
 
+declare module "@mui/material/Button" {
+  interface ButtonPropsVariantOverrides {
+    tonal: true;
+  }
+}
+
 declare module "@mui/material/Typography" {
   interface TypographyPropsVariantOverrides extends Record<M3Variant, true> {}
 }
@@ -140,6 +146,18 @@ export function buildMuiTheme(scheme: ColorScheme, isDark: boolean, density: Den
       MuiButtonBase: { defaultProps: { disableRipple: false } },
       MuiButton: {
         defaultProps: { disableElevation: true },
+        variants: [
+          {
+            // M3 filled tonal button: secondary-container, for secondary actions.
+            props: { variant: "tonal" },
+            style: {
+              backgroundColor: c.secondaryContainer,
+              color: c.onSecondaryContainer,
+              "&:hover": { backgroundColor: `color-mix(in srgb, ${c.onSecondaryContainer} 8%, ${c.secondaryContainer})` },
+              "&.Mui-disabled": { backgroundColor: `color-mix(in srgb, ${c.onSurface} 12%, transparent)` },
+            },
+          },
+        ],
         styleOverrides: {
           root: {
             borderRadius: "var(--md-sys-shape-corner-full)",
@@ -156,7 +174,15 @@ export function buildMuiTheme(scheme: ColorScheme, isDark: boolean, density: Den
           sizeSmall: { minHeight: 32, paddingInline: 16, "&::after": { inset: "-8px 0" } },
         },
       },
-      MuiIconButton: { styleOverrides: { root: { borderRadius: "var(--md-sys-shape-corner-full)" } } },
+      MuiIconButton: {
+        styleOverrides: {
+          root: {
+            borderRadius: "var(--md-sys-shape-corner-full)",
+            // 48dp touch target however small the visual button is.
+            "&::after": { content: '""', position: "absolute", width: 48, height: 48, left: "50%", top: "50%", transform: "translate(-50%, -50%)" },
+          },
+        },
+      },
       MuiToggleButton: {
         styleOverrides: {
           root: {
