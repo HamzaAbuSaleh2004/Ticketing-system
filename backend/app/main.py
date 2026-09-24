@@ -9,11 +9,13 @@ from app.config import get_settings
 from app.db import engine
 from app.redis_client import get_redis
 from app.routers.auth import router as auth_router
+from app.routers.tickets import router as tickets_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
+settings.check_prod_safe()
 
 app = FastAPI(title="Ticketing Portal API")
 
@@ -26,6 +28,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(tickets_router)
 
 
 @app.get("/health")

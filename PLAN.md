@@ -27,7 +27,7 @@
 - **Seed color: `#1E6A5E` "Spruce"**, a deep blue-green. It's calm and clinical without being Google blue. It generates warm-leaning neutrals, a teal primary, and a dusty-rose tertiary that we use for "attention" accents. Error red stays clearly distinct from the primary.
 - **Display typeface: Google Sans Flex** (OFL, on Google Fonts since Dec 2025). Used for headlines/titles. Use its `ROND` (rounded terminals) axis at a moderate value on the end-user portal and 0 on the agent console, so one family carries two personalities.
 - **Body typeface: Roboto Flex.** Used for body, labels and tables. Its `opsz` axis lets the dense agent tables read cleanly at 13px.
-- **Utility (data only): Google Sans Code**, only for ticket IDs (`TCK-01042`), timestamps and SLA countdowns.
+- **No monospace face.** Ticket IDs (`TCK-01042`), timestamps and SLA countdowns use Roboto Flex with `font-variant-numeric: tabular-nums`, so the digits don't jitter as they tick. (Revised 2026-09-24: `frontend-design` lists "a monospace face for small data labels" as a template tell. Dropping it also keeps us to the brief's two typefaces.)
 - **Tone:** *calm, spacious and reassuring for the end-user portal; dense, scannable and efficient for the agent console.*
 - Verify the exact Google Fonts family names and axis tags on fonts.google.com before wiring them up. Self-host them via `@fontsource-variable/*` if packages exist; otherwise use the Google Fonts CSS2 API with `display=swap`.
 
@@ -39,11 +39,38 @@
 | Surfaces | `surface` + `surfaceContainerLow`, mostly flat | Layered: `surfaceContainer` rail, `surfaceContainerHigh` detail pane, `surfaceContainerHighest` for the selected row |
 | Layout | Top app bar + one column: KB search on top, then "Your requests" as a **list** (not cards) | Nav rail + 3-pane: filter/queue list · ticket thread · properties/AI side panel |
 | Shape | Large (16–28px) corners, pill buttons | Pill buttons/chips stay; table and panes use small (8px) corners |
-| Signature element | **The KB answer panel**: a grounded answer with numbered source chips that link to the articles | **SLA ring/countdown** on every queue row, in Google Sans Code. Pauses visibly (hatched/"paused" label) while `pending` |
+| Signature element | **The KB answer panel**: a grounded answer with numbered source chips that link to the articles | **SLA ring/countdown** on every queue row, in tabular Roboto Flex. Pauses visibly (hatched/"paused" label) while `pending` |
 
-**Banned:** drop shadows for elevation (use tonal surfaces), purple gradients, centered hero with illustration, card grid of everything, Inter/system-ui, default MUI blue.
+**Banned:**
+- Drop shadows for elevation (use tonal surfaces), purple gradients, a centered hero with an illustration, a card grid of everything, Inter/system-ui, default MUI blue.
+- From `frontend-design`'s list of template tells:
+  - ALL-CAPS labels. MUI uppercases buttons, tabs and `overline` by default, so set `textTransform: 'none'` in the theme.
+  - Tracked-out eyebrow labels above headings.
+  - Meta strings joined with middle dots (`Uma · Billing · 2h ago`). Use separate cells or columns instead.
+  - `WORD — fragment` labels.
+  - A `→` appended to links or buttons.
+  - Accenting a single word in a headline.
+  - Numbered markers on things that aren't sequences. The KB source chips [1] [2] are fine, because they map to citations.
+  - Fade-and-slide-up entrances on every section.
 
-The executor **must load the `beautiful-web-ui` skill** before any UI phase (6–9). It follows the skill's plan → critique → build → screenshot → critique loop. The seed and fonts above replace the skill's "pick 4–6 hex values" step, because the brief mandates M3 dynamic color.
+### Design skills (the executor must load both before any UI phase, 6–9)
+
+Both are in the project at [.claude/skills/](.claude/skills/). They were installed with `npx skills` into `~/.agents/skills`, which Claude Code doesn't read, so they were copied into the project.
+
+- **`material-3`** is the design system: tokens, components, layout, navigation. Its rules **take precedence** on component structure and token usage.
+  - Colour: `--md-sys-color-*` tokens only, with correct tonal pairing (`on-X` on `X`). Hex values appear only in the generated theme file.
+  - Shape: `--md-sys-shape-corner-*` tokens, never raw `border-radius`.
+  - Type: `--md-sys-typescale-*` roles.
+  - Dividers: `outline-variant`, not `outline`.
+  - Motion: M3 easing/duration tokens. Spring physics aren't available on web.
+  - Layout: window size classes (compact < 600, medium 600–839, expanded 840–1199, large 1200–1599, extra-large 1600+). On large windows, constrain end-user content to 840–1040px.
+  - Touch targets: 48px.
+- **`frontend-design`** is the creative direction within those constraints. Use it for the two-pass process (plan → review against the brief and revise → build → screenshot → critique), "spend boldness in one place" (the signature elements above), and its UX-writing rules.
+- **Precedence:** brief > `material-3` > `frontend-design`.
+  - The seed and fonts above replace `frontend-design`'s "4–6 hex values" step, because the brief mandates M3 dynamic color.
+  - Roboto Flex is correct for M3, per `material-3`. The generic "avoid Roboto" advice doesn't apply here.
+- `beautiful-web-ui` is superseded by these two and doesn't need loading.
+- **Audit gate:** at the end of Phases 7, 8 and 9, run the `material-3` skill's **audit** procedure on that phase's screens. Every category must score ≥ 7/10, and the report is saved to `docs/audits/phase-N-md3.md`. A category below 7 gets fixed before the phase's boxes are ticked.
 
 ---
 
@@ -210,7 +237,7 @@ Each phase ends with **Verify**: commands the executor must actually run, with t
   - README gained a "Running the backend tests" section documenting `docker compose exec api pytest`.
 
 ### Phase 4 — Tickets, comments, lifecycle, SLA, audit (no AI yet)
-- [ ] **Phase 3 follow-ups (do first, each with a test).**
+- [x] **Phase 3 follow-ups (do first, each with a test).**
   - **Passwords over 72 bytes cause a 500 (reproduced).** bcrypt 5 raises `ValueError` from both `hashpw` and `checkpw` for passwords longer than 72 bytes.
     - `RegisterRequest.password`: add a validator that rejects more than 72 **UTF-8 bytes** with a 422 and a clear message. A character count isn't enough, because multi-byte characters take several bytes each.
     - Login: return a plain 401 for a password over 72 bytes, without calling bcrypt.
@@ -218,18 +245,46 @@ Each phase ends with **Verify**: commands the executor must actually run, with t
   - **Username enumeration by timing:** when login finds no user, still run `verify_password` against a fixed dummy hash, so a missing account takes as long as a wrong password.
   - **Duplicate-email race:** catch `IntegrityError` on the register commit and return 409 instead of 500.
   - **Default JWT secret:** at startup, refuse to run if `ENV=prod` and `JWT_SECRET` is still the default or shorter than 32 bytes. Local and test behaviour doesn't change.
-- [ ] Implement `domain/lifecycle.py` and `domain/sla.py` with **unit tests first** (every transition, illegal transitions, pause/resume math across multiple pending cycles, cooling-off reopen vs closed → follow-up).
-- [ ] `POST /tickets`, `GET /tickets` (filters: status, priority, assignee (incl. `me` and `unassigned`), category, `q` text; sort; pagination), `GET /tickets/:id` (with thread and audit trail for agents), `PATCH /tickets/:id` (status/assignee/priority/category/escalate).
-- [ ] `POST /tickets/:id/comments` `{body, is_internal_note}`: only agents/admins may send internal notes. Customer public reply side effects: `pending`→`in_progress`, `resolved` within the window→`in_progress`, `closed`→follow-up ticket. Agent public reply sets `first_responded_at`.
-- [ ] Attachments: `multipart` upload to a Docker volume at `/data/attachments`; store metadata. Keep it minimal (size limit, content-type allowlist).
-- [ ] Publish `ticket.created` to the EventBus on create.
+- [x] Implement `domain/lifecycle.py` and `domain/sla.py` with **unit tests first** (every transition, illegal transitions, pause/resume math across multiple pending cycles, cooling-off reopen vs closed → follow-up).
+- [x] `POST /tickets`, `GET /tickets` (filters: status, priority, assignee (incl. `me` and `unassigned`), category, `q` text; sort; pagination), `GET /tickets/:id` (with thread and audit trail for agents), `PATCH /tickets/:id` (status/assignee/priority/category/escalate).
+- [x] `POST /tickets/:id/comments` `{body, is_internal_note}`: only agents/admins may send internal notes. Customer public reply side effects: `pending`→`in_progress`, `resolved` within the window→`in_progress`, `closed`→follow-up ticket. Agent public reply sets `first_responded_at`.
+- [x] Attachments: `multipart` upload to a Docker volume at `/data/attachments`; store metadata. Keep it minimal (size limit, content-type allowlist).
+- [x] Publish `ticket.created` to the EventBus on create.
 - **Verify:** pytest integration test walks one ticket `new→triaged→open→in_progress→pending→in_progress→resolved→(customer reply)→in_progress→resolved→closed`, then a customer reply creates a linked follow-up. Also test that an end user gets 404 on another user's ticket and never receives internal notes in `GET /tickets/:id`. It asserts the SLA due date shifted by exactly the pending duration (frozen clock) and one audit row per change.
 
+  **Evidence (2026-09-24):**
+  - Phase 3 follow-ups, each with its own test in `backend/tests/test_auth.py`/`test_config.py`:
+    - `MAX_PASSWORD_BYTES = 72` validator on `RegisterRequest.password` (`backend/app/schemas/auth.py`) rejects >72 UTF-8 bytes with 422 (`test_register_password_over_72_bytes_is_422`, and a UTF-8-multibyte case `test_register_password_over_72_utf8_bytes_is_422` using `"€" * 25` — 25 codepoints, 75 bytes). Login checks `password_exceeds_limit()` (`backend/app/auth/security.py`) before touching bcrypt and returns a plain 401 (`test_login_password_over_72_bytes_is_401_not_500`).
+    - Both `RegisterRequest.email` and `LoginRequest.email` strip+lowercase via a `field_validator`; `test_register_and_login_email_case_insensitive` and `test_register_duplicate_email_different_case_conflicts` cover it.
+    - `verify_password_timing_safe()` always calls `bcrypt.checkpw` against a fixed dummy hash when no user is found, instead of short-circuiting — login's `if user is None or not password_ok` now evaluates `password_ok` unconditionally.
+    - Register no longer pre-checks for an existing email; it inserts and catches `IntegrityError` on commit → 409 (`backend/app/routers/auth.py`), closing the check-then-insert race instead of just wrapping it. `test_register_duplicate_email_conflicts` (existing) still covers the sequential case.
+    - `Settings.check_prod_safe()` (`backend/app/config.py`), called from `main.py` at import time, raises `RuntimeError` when `ENV=prod` and `JWT_SECRET` is the default or under 32 bytes; local/test are unaffected. 4 tests in `test_config.py`.
+  - `backend/app/domain/lifecycle.py`: `ALLOWED_TRANSITIONS` table, `validate_transition` (raises `IllegalTransitionError` with the allowed set; guards `triaged→open` on a missing `assignee_id`), `can_escalate`/`escalate_priority` (capped at `urgent`), `customer_reply_outcome` (`reopen`/`follow_up`/`none` — a `resolved` ticket past the cooling-off window is treated like `closed`, since nothing auto-closes it yet). `backend/app/domain/sla.py`: `compute_due_dates`, `recompute_due_on_priority_change` (freezes the response due date once responded, freezes the resolution due date while paused), `enter_pending`/`leave_pending` (pure pause-duration math), `mark_first_response`, `is_at_risk`. `backend/app/domain/clock.py` adds a single `now()` indirection so integration tests can freeze time by monkeypatching it, instead of every call site importing `datetime.now`. `backend/app/domain/audit.py`: `write_audit()`.
+  - **51 unit tests, no DB, no sleep:** `backend/tests/test_domain_lifecycle.py` (39 — every legal/illegal transition pair, the assignee guard, escalation priority capping, all 4 `customer_reply_outcome` branches) and `backend/tests/test_domain_sla.py` (12 — due-date computation, priority-change recompute under both freeze conditions, single- and multi-cycle pause/resume accumulation, at-risk thresholds including already-breached).
+  - `backend/app/routers/tickets.py`: `POST /tickets` (creator becomes requester, default `priority=normal`, SLA due dates computed from the matching `sla_policies` row, one `ticket.created` audit row, publishes to the event bus), `GET /tickets` (role-scoped — end users always filtered to `requester_id=user.id` in the query; `status`/`priority`/`category`/`q` (ILIKE on subject+description)/`assignee` (`me`/`unassigned`/a user id) filters; `sort` against a small allowlisted column map; `page`/`page_size` pagination with a `total` count), `GET /tickets/:id` (404, not 403, for an end user's own-scoping miss; comments filtered to non-internal for end users **in the query**; audit trail only attached for agents/admins; response includes `allowed_transitions` from `domain/lifecycle.allowed_next_statuses` so the Phase 8 status control can rely on the API instead of duplicating the transition table), `PATCH /tickets/:id` (reads `model_dump(exclude_unset=True)` so an omitted field is left alone but `assignee_id: null` unassigns; handles `status` via `validate_transition` + SLA pause/resume/resolved/closed timestamps, `priority` via `recompute_due_on_priority_change`, `category` validated against the `categories` table, `assignee_id` validated to be an existing agent/admin, and `escalate` — bumps priority, sets `escalated`, reassigns to the least-loaded `senior`-team agent via one grouped query, blocked with 409 on a `resolved`/`closed` ticket; exactly one `audit_log` row per PATCH with a `{before, after}` diff of only the fields that actually changed).
+  - `POST /tickets/:id/comments`: internal notes rejected with 403 for non-agents; a requester's public reply runs `customer_reply_outcome` — `reopen` applies the pause/resume or resolved-clear math and adds one `ticket.reopened_by_reply` audit row; `follow_up` creates a new `Ticket` (`parent_ticket_id` set, own SLA due dates, own `ticket.created`-audited row, publishes its own `ticket.created` event) and returns `{follow_up_ticket_id}` with **no** comment on the original, which stays untouched; an agent's first public reply sets `first_responded_at`.
+  - `POST /tickets/:id/attachments`: `ALLOWED_ATTACHMENT_CONTENT_TYPES` (`image/png`, `image/jpeg`, `image/gif`, `application/pdf`, `text/plain`) → 415 otherwise; reads up to `ATTACHMENT_MAX_BYTES + 1` and rejects over the limit with 413; stores under `/data/attachments/<ticket_id>/<uuid>_<sanitized filename>` (`Path(...).name` strips any directory components from the client filename to block path traversal); metadata row includes an optional `comment_id` validated to belong to the ticket.
+  - `backend/app/events/bus.py`: `EventBus` protocol + `RedisStreamBus` (`XADD`, string-coerced fields) per PLAN.md §5's Pub/Sub seam; `create_ticket` and the follow-up-ticket path both publish `ticket.created`. Verified against the real `redis` container: `docker compose exec redis redis-cli XLEN ticket.created` / `XRANGE` show one entry per created ticket (including follow-ups) with the right `ticket_id`.
+  - **Integration tests** (`backend/tests/test_tickets.py`, 5; `backend/tests/test_attachments.py`, 4 — 9 new integration tests, 81 total in the suite): `test_full_lifecycle_walk_sla_pause_and_follow_up` walks `new→triaged→(rejected open w/o assignee, 409 with `allowed:["open"]`)→(assign)→open→in_progress→pending→(clock frozen +2h via monkeypatching `app.domain.clock.now`)→in_progress→resolved→(customer reply, reopens)→in_progress→resolved→closed→(customer reply, follow-up)`, asserting after every status PATCH that the ticket's `audit_log` row count increased by exactly 1 (and by 0 on the rejected transition), that `sla_resolution_due` shifted by exactly the 2-hour pause duration and `sla_paused_total_seconds == 7200`, and that the closed ticket's audit trail is unchanged after the follow-up reply. `test_end_user_gets_404_on_another_users_ticket`, `test_end_user_never_receives_internal_notes` (asserts the end user's `comments` list is empty and `audit_log` is `None`, while the agent's view has both), `test_escalate_bumps_priority_and_reassigns_to_least_loaded_senior`, `test_cannot_escalate_a_closed_ticket`. Attachment tests cover an allowed upload, a rejected content type, an oversized file, and cross-user 404 scoping.
+  - `docker compose exec api pytest -q` → **81 passed**. `ruff check app tests` → "All checks passed!".
+  - Fresh-state end-to-end check: `docker compose down -v && docker compose up -d --build` → `api` logs show both migrations applying, `seed: complete`, uvicorn startup; `curl localhost:8000/health` → `{"status":"ok","db":true,"redis":true}`; `curl localhost:5173/` → 200; `pytest`/`ruff` re-run clean against the fresh stack. Manual curl walk against the real dev stack as seeded users (`user1@ticketing.demo` / `agent1@ticketing.demo`): create a ticket → `GET /tickets?status=new` lists it → `PATCH {"status":"triaged"}` → response's `allowed_transitions` correctly narrows to `["open"]`.
+
 ### Phase 5 — Gemini: auto-triage + KB smart search
+- [ ] **Phase 4 follow-ups (do first, each with a test).**
+  - **SLA bug: a priority change erases earlier pause credit.** `recompute_due_on_priority_change` rebuilds the resolution due date as `created_at + resolution_minutes`, which drops `sla_paused_total_seconds`. It also leaves the old due date in place when the ticket is currently paused, so escalating a `pending` ticket never tightens its deadline.
+    - Fix: always compute `created_at + resolution_minutes + paused_total_seconds`, even while paused. `leave_pending` then adds the current pause when the ticket resumes.
+    - Test: pending for 2h → resume → escalate → the due date still includes the 2h. And: escalate while pending → resume after 1h → due date = new window + all pause time.
+  - **Internal-note attachments leak to end users.** `_build_ticket_detail` filters internal-note comments for end users, but not attachments whose `comment_id` points to an internal note. Filter them in the query.
+  - **Hide agent-only fields from end users.** Don't send `ai_triage` (it contains `suggested_response_draft`), `sla_paused_total_seconds` or `allowed_transitions` to end users. Use a separate `TicketDetailPublic` response model rather than nulling fields.
+  - **Attachment download:** add `GET /attachments/{id}` with the same role scoping (the ticket must be visible to the user, and end users are blocked from internal-note attachments). Serve it with `Content-Disposition: attachment`. Phases 7 and 8 need this.
+  - **Auto-close sweep:** in the worker's periodic loop (alongside the SLA-risk sweep), move `resolved` tickets whose cooling-off window has expired to `closed`. Set `closed_at` and write an audit row with `actor_id = NULL`. This makes the lifecycle match the brief, not just "behave like closed".
+  - **Worker concurrency:** the SLA-risk and auto-close sweeps must lock the rows they change (`SELECT ... FOR UPDATE SKIP LOCKED`), so a sweep can't overwrite an agent's `PATCH` that's running at the same moment.
+
 **Triage (do first, since it has the most leverage):**
 - [ ] `ai/gemini.py`: `generateContent` with `generationConfig.responseMimeType="application/json"` and a `responseSchema` derived from the Pydantic `TriageSuggestion` model: `{category (enum of active categories), priority (enum), one_line_summary, suggested_response_draft}`. Timeout 20s, 2 retries with backoff, validate with Pydantic, and fall back to `FakeProvider` on failure (log it; the ticket still flows).
 - [ ] **Verify the current REST request shape** (field names, `x-goog-api-key` header, endpoint path) against ai.google.dev docs before coding. Don't write it from memory.
 - [ ] Worker consumes `ticket.created` → calls triage → writes `ai_triage`, applies category + priority automatically, recomputes SLA, sets status `triaged`, and audit-logs with `actor_id = NULL` (system). `POST /tickets/:id/ai-triage` runs the same function synchronously (agent "re-run triage" button + internal use).
+- [ ] The worker also runs a 60s periodic loop: the **SLA-risk auto-escalation sweep** from §3 plus the auto-close sweep above. Put each sweep in its own function taking an injected `now`, so tests call it directly.
 - [ ] The agent can accept/override each field: `PATCH` records which fields were overridden in `ai_triage.accepted_fields`.
 
 **KB search:**
@@ -239,8 +294,8 @@ Each phase ends with **Verify**: commands the executor must actually run, with t
 - **Verify:** pytest with `FakeProvider` (deterministic). Then, **only if `GEMINI_API_KEY` is set**, a live smoke script `backend/scripts/smoke_gemini.py` that triages one ticket and runs one KB query against each of 3 seeded articles, printing results. Report honestly if no key is available.
 
 ### Phase 6 — Frontend foundation: theme, shell, auth
-Load `beautiful-web-ui` first. Write the design plan (seed, fonts, tone, per-portal table from §0) as a comment block at the top of `src/theme/index.ts`, critique it once, then build.
-- [ ] `theme/`: `material-color-utilities` → `SchemeTonalSpot` (verify the class name in the package) from `#1E6A5E` for light and dark → emit every M3 role as a CSS variable (`--md-sys-color-*`) → MUI `createTheme` maps palette, `shape`, typography roles (display/headline/title/body/label) and component overrides (Buttons = pill, no shadows anywhere: `shadows` all `none`, elevation via `surfaceContainer*`). Add a `density` context: `comfortable` (end user) vs `compact` (agent).
+Load `material-3` and `frontend-design` first. Follow `frontend-design`'s two passes: write the design plan (seed, fonts, tone, per-portal table and banned list from §0, plus a one-sentence layout concept and ASCII wireframe for each portal) to `docs/design-plan.md`. Then review it against the brief, and record what you changed and why. Build only after that.
+- [ ] `theme/`: `material-color-utilities` → `SchemeContent` from `#1E6A5E` for light and dark, following `material-3`'s [theming-and-dynamic-color.md](.claude/skills/material-3/references/theming-and-dynamic-color.md). `SchemeContent` keeps the primary close to the chosen seed, where `SchemeTonalSpot` would desaturate it. Verify the class name and constructor in the installed package. Contrast level 0 by default, with the medium/high levels (0.5 / 1.0) exposed as a setting. Then emit every M3 colour role as a CSS variable (`--md-sys-color-*`), plus the shape scale (`--md-sys-shape-corner-*`), the type scale (`--md-sys-typescale-*`, with Google Sans Flex for display/headline and Roboto Flex for title/body/label), and the motion easing/duration tokens, all from `material-3`'s references. Then MUI `createTheme` maps palette, `shape`, typography roles (display/headline/title/body/label) and component overrides (Buttons = pill, no shadows anywhere: `shadows` all `none`, elevation via `surfaceContainer*`). Add a `density` context: `comfortable` (end user) vs `compact` (agent).
 - [ ] Theme toggle (system/light/dark). Fonts are loaded with `swap`.
 - [ ] Login/register screens (end-user styled), token store, `RoleGate`, role-based redirect after login (`end_user`→`/`, `agent`→`/agent`, `admin`→`/admin`).
 - [ ] A dev-only `/_tokens` route showing every color role and type role. It's used for the screenshot critique.
@@ -253,9 +308,9 @@ Load `beautiful-web-ui` first. Write the design plan (seed, fonts, tone, per-por
 - **Verify:** Playwright: register → search KB (answer + source link visible) → submit ticket → the category/priority chip appears. Screenshot at 360px and 1280px, then critique.
 
 ### Phase 8 — Agent console (dense, data-forward)
-- [ ] Nav rail (Queue, Dashboard; Admin if admin). Queue = filter chips (status, priority, assignee incl. "Mine"/"Unassigned", category) + a dense table with ID (mono), subject + AI one-liner, requester, priority, status, **SLA indicator**, assignee, updated. The URL holds the filter state. Keyboard: `j/k` to move, `Enter` to open.
+- [ ] Nav rail (Queue, Dashboard; Admin if admin). Queue = filter chips (status, priority, assignee incl. "Mine"/"Unassigned", category) + a dense table with ID (tabular figures), subject + AI one-liner, requester, priority, status, **SLA indicator**, assignee, updated. The URL holds the filter state. Keyboard: `j/k` to move, `Enter` to open.
 - [ ] Ticket detail (right pane or route): the thread with internal notes visually distinct (tertiary-container tint + "Internal" label, not color alone). The composer has a Reply / Internal note toggle. Side panel: status control that **only offers legal next transitions** (from the API), assignee picker, priority, category, Escalate button, and an **AI triage panel** with the suggestions, per-field Accept/Override, a "Use draft" button that inserts `suggested_response_draft` into the composer, and "Re-run triage". Audit trail in a collapsible section.
-- [ ] `SlaIndicator`: countdown in Google Sans Code with ring progress. States: on track / at risk (tertiary) / breached (error) / **paused** (outlined + "Paused" text), and none when resolved/closed. All states carry text, not just color.
+- [ ] `SlaIndicator`: countdown in tabular Roboto Flex with ring progress. States: on track / at risk (tertiary) / breached (error) / **paused** (outlined + "Paused" text), and none when resolved/closed. All states carry text, not just color.
 - **Verify:** Playwright: an agent opens the seeded ticket, walks it through the full lifecycle via the UI, and adds an internal note. The end-user session doesn't see the note. Screenshot the queue at 1280 and 1600 and critique the density against the end-user portal.
 
 ### Phase 9 — Analytics dashboard + Admin

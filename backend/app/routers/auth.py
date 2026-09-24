@@ -1,9 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import current_user, require_role
-from app.auth.security import hash_password, verify_password
+from app.auth.security import (
+    hash_password,
+    password_exceeds_limit,
+    verify_password_timing_safe,
+)
 from app.auth.tokens import create_access_token
 from app.db import get_db
 from app.models import User
@@ -15,10 +20,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest, session: AsyncSession = Depends(get_db)) -> TokenResponse:
-    existing = await session.scalar(select(User).where(User.email == body.email))
-    if existing is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Email already registered")
-
     # Public registration always creates an end_user; agent/admin accounts are
     # provisioned by an admin (Phase 9), never through this endpoint.
     user = User(
@@ -29,7 +30,15 @@ async def register(body: RegisterRequest, session: AsyncSession = Depends(get_db
         password_hash=hash_password(body.password),
     )
     session.add(user)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        # Two concurrent registrations for the same email both pass the
+        # pre-commit check; the unique constraint is the real guard, so
+        # translate its violation into the same 409 a sequential duplicate
+        # would get, instead of a 500.
+        await session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Email already registered") from exc
     await session.refresh(user)
 
     token = create_access_token(user_id=user.id, role=user.role)
@@ -38,9 +47,17 @@ async def register(body: RegisterRequest, session: AsyncSession = Depends(get_db
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, session: AsyncSession = Depends(get_db)) -> TokenResponse:
+    invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
+
+    # bcrypt raises ValueError past 72 bytes rather than just comparing
+    # wrong; no real password is this long, so reject without hashing.
+    if password_exceeds_limit(body.password):
+        raise invalid
+
     user = await session.scalar(select(User).where(User.email == body.email))
-    if user is None or not verify_password(body.password, user.password_hash):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
+    password_ok = verify_password_timing_safe(body.password, user.password_hash if user else None)
+    if user is None or not password_ok:
+        raise invalid
 
     token = create_access_token(user_id=user.id, role=user.role)
     return TokenResponse(access_token=token, user=UserOut.model_validate(user))

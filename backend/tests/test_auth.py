@@ -89,6 +89,56 @@ async def test_tampered_token_is_401(client):
     assert resp.status_code == 401
 
 
+async def test_register_password_over_72_bytes_is_422(client):
+    resp = await client.post(
+        "/auth/register",
+        json={"email": "toolong@example.com", "password": "a" * 73, "name": "Too Long"},
+    )
+    assert resp.status_code == 422
+
+
+async def test_register_password_over_72_utf8_bytes_is_422(client):
+    # 24 codepoints but each is 3+ bytes in UTF-8, well over the 72-byte limit.
+    resp = await client.post(
+        "/auth/register",
+        json={"email": "multibyte@example.com", "password": "€" * 25, "name": "Multibyte"},
+    )
+    assert resp.status_code == 422
+
+
+async def test_login_password_over_72_bytes_is_401_not_500(client):
+    resp = await client.post(
+        "/auth/login", json={"email": "whoever@example.com", "password": "a" * 100}
+    )
+    assert resp.status_code == 401
+
+
+async def test_register_and_login_email_case_insensitive(client):
+    register = await client.post(
+        "/auth/register",
+        json={"email": "Mixed.Case@Example.com", "password": "Password123!", "name": "Mixed Case"},
+    )
+    assert register.status_code == 201
+    assert register.json()["user"]["email"] == "mixed.case@example.com"
+
+    login = await client.post(
+        "/auth/login", json={"email": "  MIXED.CASE@EXAMPLE.COM  ", "password": "Password123!"}
+    )
+    assert login.status_code == 200
+
+
+async def test_register_duplicate_email_different_case_conflicts(client):
+    await client.post(
+        "/auth/register",
+        json={"email": "casedup@example.com", "password": "Password123!", "name": "Case Dup"},
+    )
+    second = await client.post(
+        "/auth/register",
+        json={"email": "CaseDup@Example.com", "password": "Password123!", "name": "Case Dup 2"},
+    )
+    assert second.status_code == 409
+
+
 async def test_expired_token_is_401(client, db_session):
     user = await _create_user(db_session, email="expired@example.com", role=UserRole.end_user)
     settings = get_settings()

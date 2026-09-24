@@ -39,6 +39,16 @@ class Settings(BaseSettings):
     # Demo data
     SEED_DEMO: bool = True
 
+    def check_prod_safe(self) -> None:
+        """Phase 3 follow-up: refuse to start in prod with a weak/default
+        JWT secret. Local and test behaviour is unaffected."""
+        if self.ENV != "prod":
+            return
+        if self.JWT_SECRET == Settings.model_fields["JWT_SECRET"].default or len(self.JWT_SECRET) < 32:
+            raise RuntimeError(
+                "JWT_SECRET must be set to a random value of at least 32 bytes when ENV=prod"
+            )
+
 
 @lru_cache
 def get_settings() -> Settings:
