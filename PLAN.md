@@ -147,10 +147,18 @@ closed      → (none; read-only)
 Each phase ends with **Verify**: commands the executor must actually run, with the output observed, before ticking the box.
 
 ### Phase 1 — Scaffold & Compose skeleton
-- [ ] Create the layout above; `docker-compose.yml` with `db` (pgvector pg16, healthcheck), `redis` (healthcheck), `api` (depends_on healthy db/redis; runs `alembic upgrade head && python -m app.seed && uvicorn`), `worker`, `frontend` (Vite dev server on 5173, proxy `/api` → `api:8000`).
-- [ ] `env_file: .env` with `required: false` so `docker compose up` works with no `.env` (defaults to `AI_PROVIDER=fake`). `.env.example` documents `GEMINI_API_KEY`.
-- [ ] `GET /health` returns db + redis status.
+- [x] Create the layout above; `docker-compose.yml` with `db` (pgvector pg16, healthcheck), `redis` (healthcheck), `api` (depends_on healthy db/redis; runs `alembic upgrade head && python -m app.seed && uvicorn`), `worker`, `frontend` (Vite dev server on 5173, proxy `/api` → `api:8000`).
+- [x] `env_file: .env` with `required: false` so `docker compose up` works with no `.env` (defaults to `AI_PROVIDER=fake`). `.env.example` documents `GEMINI_API_KEY`.
+- [x] `GET /health` returns db + redis status.
 - **Verify:** `docker compose up -d --build` → `curl localhost:8000/health` is OK → `localhost:5173` renders a placeholder. Then `docker compose down -v && docker compose up -d` also works (no manual steps).
+
+  **Evidence (2026-09-24):**
+  - `docker compose up -d --build` → all 5 services (`db`, `redis`, `api`, `worker`, `frontend`) built and started; `db`/`redis` reported `(healthy)`.
+  - `curl localhost:8000/health` → `{"status":"ok","db":true,"redis":true}`.
+  - `curl localhost:5173/` → 200, served the placeholder `<div id="root">` page with the Vite/React dev client injected.
+  - `docker compose down -v` (removed containers + `db_data`/`backend_venv`/`attachments_data` volumes) → `docker compose up -d` (no `--build`, no manual steps) → re-checked health (`{"status":"ok","db":true,"redis":true}`) and frontend (200) again; `alembic upgrade head` and `python -m app.seed` ran cleanly with no migrations/seed data yet (both are no-ops until Phase 2).
+  - Frontend deps were bumped to current majors during scaffolding (MUI 6→9, React Router 6→7, Vite 6→8, Vitest 2→5, TypeScript 5→7) after `npm audit` flagged a critical/high CVE pair in the initial pin set; `npm audit` now reports 0 vulnerabilities and `npm run build`/`tsc -b` pass.
+  - `git init` run; two commits made (scaffold, then a fix removing an accidentally-tracked `tsconfig.tsbuildinfo`).
 
 ### Phase 2 — Data model, migrations, seed
 - [ ] SQLAlchemy models for all brief tables plus the §2 additions; first Alembic migration; `CREATE EXTENSION vector`.
