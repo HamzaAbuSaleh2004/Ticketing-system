@@ -146,9 +146,14 @@ export function buildMuiTheme(scheme: ColorScheme, isDark: boolean, density: Den
             textTransform: "none",
             minHeight: compact ? 36 : 40,
             paddingInline: 24,
+            // M3: 40dp visual height, 48dp touch target. The invisible
+            // ::after pads the hit area out to 48 without changing layout
+            // (ButtonBase is already position: relative). Layouts keep
+            // >= 8px between stacked buttons so padded areas don't overlap.
+            "&::after": { content: '""', position: "absolute", inset: compact ? "-6px 0" : "-4px 0" },
           },
           outlined: { borderColor: c.outline },
-          sizeSmall: { minHeight: 32, paddingInline: 16 },
+          sizeSmall: { minHeight: 32, paddingInline: 16, "&::after": { inset: "-8px 0" } },
         },
       },
       MuiIconButton: { styleOverrides: { root: { borderRadius: "var(--md-sys-shape-corner-full)" } } },

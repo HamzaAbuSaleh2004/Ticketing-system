@@ -22,5 +22,15 @@ export async function fontsReady(page: Page) {
 
 export async function shot(page: Page, phase: string, name: string) {
   await fontsReady(page);
+  // Capture the settled state, not a frame of an entrance, snackbar or
+  // theme-switch transition (two frames first, so just-triggered ones exist).
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  // Infinite ones (spinners, skeleton pulse) never finish, so only finite ones count.
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+      .every((a) => a.playState !== "running"),
+  );
   await page.screenshot({ path: path.join(SHOTS, phase, `${name}.png`), fullPage: true });
 }

@@ -37,6 +37,8 @@ class CommentOut(BaseModel):
     id: int
     ticket_id: int
     author_id: int
+    author_name: str
+    author_role: str
     body: str
     is_internal_note: bool
     created_at: datetime
@@ -100,6 +102,9 @@ class TicketDetailPublic(TicketListItem):
     parent_ticket_id: int | None
     resolved_at: datetime | None
     closed_at: datetime | None
+    # While resolved: until when a customer reply reopens it instead of
+    # starting a follow-up (resolved_at + RESOLVED_COOLOFF_HOURS).
+    reopen_until: datetime | None = None
     comments: list[CommentOut] = []
     attachments: list[AttachmentOut] = []
 

@@ -10,6 +10,7 @@ from app.db import engine
 from app.redis_client import get_redis
 from app.routers.attachments import router as attachments_router
 from app.routers.auth import router as auth_router
+from app.routers.categories import router as categories_router
 from app.routers.kb import router as kb_router
 from app.routers.tickets import router as tickets_router
 
@@ -33,6 +34,7 @@ app.include_router(auth_router)
 app.include_router(tickets_router)
 app.include_router(attachments_router)
 app.include_router(kb_router)
+app.include_router(categories_router)
 
 
 @app.get("/health")

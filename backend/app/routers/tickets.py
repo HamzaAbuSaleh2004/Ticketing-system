@@ -1,10 +1,11 @@
+from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import InstrumentedAttribute
+from sqlalchemy.orm import InstrumentedAttribute, selectinload
 
 from app.ai import get_ai_provider
 from app.auth.dependencies import current_user, require_role
@@ -90,6 +91,7 @@ async def _build_ticket_detail(
 
     comment_stmt = (
         select(TicketComment)
+        .options(selectinload(TicketComment.author))
         .where(TicketComment.ticket_id == ticket.id)
         .order_by(TicketComment.created_at, TicketComment.id)
     )
@@ -105,11 +107,18 @@ async def _build_ticket_detail(
         attachment_stmt = attachment_stmt.where(
             or_(Attachment.comment_id.is_(None), TicketComment.is_internal_note.is_(False))
         )
-    comments = [CommentOut.model_validate(c) for c in await session.scalars(comment_stmt)]
+    comments = [_comment_out(c, user) for c in await session.scalars(comment_stmt)]
     attachments = [AttachmentOut.model_validate(a) for a in await session.scalars(attachment_stmt)]
 
+    cooloff = timedelta(hours=get_settings().RESOLVED_COOLOFF_HOURS)
     public = TicketDetailPublic.model_validate(ticket).model_copy(
-        update={"comments": comments, "attachments": attachments}
+        update={
+            "comments": comments,
+            "attachments": attachments,
+            "reopen_until": ticket.resolved_at + cooloff
+            if ticket.status is TicketStatus.resolved and ticket.resolved_at
+            else None,
+        }
     )
     if not agent:
         return public
@@ -126,6 +135,14 @@ async def _build_ticket_detail(
         audit_log=[AuditLogOut.model_validate(row) for row in audit_rows],
         allowed_transitions=sorted(allowed_next_statuses(ticket.status), key=lambda s: s.value),
     )
+
+
+def _comment_out(comment: TicketComment, viewer: User) -> CommentOut:
+    out = CommentOut.model_validate(comment)
+    # Customers see staff by first name only ("Tara from Support").
+    if not _is_agent(viewer) and comment.author.role in _AGENT_ROLES:
+        out.author_name = comment.author.name.split()[0]
+    return out
 
 
 def _parse_sort(sort: str) -> tuple[InstrumentedAttribute, bool]:
@@ -487,6 +504,7 @@ async def create_comment(
     comment = TicketComment(
         ticket_id=ticket.id,
         author_id=user.id,
+        author=user,
         body=body.body,
         is_internal_note=body.is_internal_note,
     )
@@ -496,8 +514,9 @@ async def create_comment(
         ticket.first_responded_at = mark_first_response(None, now)
 
     await session.commit()
-    await session.refresh(comment)
-    return CommentCreateResult(comment=CommentOut.model_validate(comment))
+    # Only server-generated columns: a full refresh would expire `author`.
+    await session.refresh(comment, attribute_names=["id", "created_at"])
+    return CommentCreateResult(comment=_comment_out(comment, user))
 
 
 @router.post("/{ticket_id}/attachments", response_model=AttachmentOut, status_code=status.HTTP_201_CREATED)

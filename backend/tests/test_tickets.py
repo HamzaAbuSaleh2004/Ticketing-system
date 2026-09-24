@@ -307,3 +307,51 @@ async def test_cannot_escalate_a_closed_ticket(client, db_session, monkeypatch):
 
     resp = await client.patch(f"/tickets/{ticket_id}", json={"escalate": True}, headers=_auth(agent_token))
     assert resp.status_code == 409
+
+
+async def test_thread_carries_author_names_and_categories_are_listed(client, db_session):
+    from app.models import Category
+
+    db_session.add(Category(name="Billing", slug="billing", active=True))
+    await db_session.commit()
+    customer_token, _ = await _register(client, "names-customer@example.com", name="Uma Customer")
+    await _create_agent(db_session, email="names-agent@example.com")
+    agent_token = await _login(client, "names-agent@example.com", "Secret123!")
+    ticket_id = (
+        await client.post("/tickets", json={"subject": "Hi", "description": "Help"}, headers=_auth(customer_token))
+    ).json()["id"]
+
+    posted = await client.post(
+        f"/tickets/{ticket_id}/comments", json={"body": "On it"}, headers=_auth(agent_token)
+    )
+    assert posted.json()["comment"]["author_name"] == "Agent"
+    await client.post(f"/tickets/{ticket_id}/comments", json={"body": "Thanks"}, headers=_auth(customer_token))
+
+    thread = (await client.get(f"/tickets/{ticket_id}", headers=_auth(customer_token))).json()["comments"]
+    assert [(c["author_name"], c["author_role"]) for c in thread] == [("Agent", "agent"), ("Uma Customer", "end_user")]
+
+    cats = (await client.get("/categories", headers=_auth(customer_token))).json()
+    assert cats == [{"id": cats[0]["id"], "name": "Billing", "slug": "billing", "active": True}]
+    assert (await client.get("/categories")).status_code == 401
+
+
+async def test_customers_see_staff_first_names_and_reopen_window(client, db_session, monkeypatch):
+    _freeze(monkeypatch, BASE)
+    customer_token, _ = await _register(client, "first-name@example.com")
+    agent = await _create_agent(db_session, email="first-agent@example.com")
+    agent.name = "Tara Tier1"
+    await db_session.commit()
+    agent_token = await _login(client, "first-agent@example.com", "Secret123!")
+    tid = (await client.post("/tickets", json={"subject": "s", "description": "d"}, headers=_auth(customer_token))).json()["id"]
+    await client.post(f"/tickets/{tid}/comments", json={"body": "Hi"}, headers=_auth(agent_token))
+
+    as_customer = (await client.get(f"/tickets/{tid}", headers=_auth(customer_token))).json()
+    as_agent = (await client.get(f"/tickets/{tid}", headers=_auth(agent_token))).json()
+    assert as_customer["comments"][0]["author_name"] == "Tara"
+    assert as_agent["comments"][0]["author_name"] == "Tara Tier1"
+    assert as_customer["reopen_until"] is None
+
+    for patch in ({"status": "triaged"}, {"assignee_id": agent.id}, {"status": "open"}, {"status": "in_progress"}, {"status": "resolved"}):
+        assert (await client.patch(f"/tickets/{tid}", json=patch, headers=_auth(agent_token))).status_code == 200
+    resolved = (await client.get(f"/tickets/{tid}", headers=_auth(customer_token))).json()
+    assert datetime.fromisoformat(resolved["reopen_until"]) == BASE + timedelta(hours=72)

@@ -11,7 +11,18 @@ export class ApiError extends Error {
 
 type Options = { method?: string; body?: unknown; form?: FormData; signal?: AbortSignal };
 
-export async function api<T>(path: string, { method = "GET", body, form, signal }: Options = {}): Promise<T> {
+export async function api<T>(path: string, options: Options = {}): Promise<T> {
+  const resp = await request(path, options);
+  if (resp.status === 204) return undefined as T;
+  return (await resp.json()) as T;
+}
+
+/** Same auth + error handling as api(), for binary responses (downloads). */
+export async function apiBlob(path: string): Promise<Blob> {
+  return (await request(path, {})).blob();
+}
+
+async function request(path: string, { method = "GET", body, form, signal }: Options): Promise<Response> {
   const headers: Record<string, string> = {};
   const token = session.get()?.token;
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -38,8 +49,7 @@ export async function api<T>(path: string, { method = "GET", body, form, signal 
     }
     throw new ApiError(resp.status, detail);
   }
-  if (resp.status === 204) return undefined as T;
-  return (await resp.json()) as T;
+  return resp;
 }
 
 /** A human message for an API error's `detail` (string, or FastAPI's 422 list). */

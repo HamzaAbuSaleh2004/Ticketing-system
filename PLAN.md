@@ -346,10 +346,46 @@ Each phase ends with **Verify**: commands the executor must actually run, with t
     - `toCamel` was duplicated → shared.
 
 ### Phase 7 — End-user portal (calm, spacious)
-- [ ] Home: a prominent KB search field (M3 search bar). The **signature grounded-answer panel** shows the answer text with inline [n] markers mapped to numbered source chips that link to the article page, with loading skeleton and empty/no-answer states. Below it is "Your requests" as a list with status chip, relative updated time and a human status line ("Waiting on you" for `pending`).
-- [ ] New request: subject, description, optional attachment. On submit, go to the ticket view with an optimistic "We're reviewing this" state, which updates (poll every 3s up to 30s, or refetch on focus) when triage lands and applies the category/priority.
-- [ ] Ticket view: the public thread only, a reply box, and state-aware copy (resolved → "Reply within 72h to reopen"; closed → "Replying starts a new request").
+- [x] Home: a prominent KB search field (M3 search bar). The **signature grounded-answer panel** shows the answer text with inline [n] markers mapped to numbered source chips that link to the article page, with loading skeleton and empty/no-answer states. Below it is "Your requests" as a list with status chip, relative updated time and a human status line ("Waiting on you" for `pending`).
+- [x] New request: subject, description, optional attachment. On submit, go to the ticket view with an optimistic "We're reviewing this" state, which updates (poll every 3s up to 30s, or refetch on focus) when triage lands and applies the category/priority.
+- [x] Ticket view: the public thread only, a reply box, and state-aware copy (resolved → "Reply within 72h to reopen"; closed → "Replying starts a new request").
 - **Verify:** Playwright: register → search KB (answer + source link visible) → submit ticket → the category/priority chip appears. Screenshot at 360px and 1280px, then critique.
+
+  **Evidence (2026-09-24):**
+  - Screens (`frontend/src/portals/enduser/`):
+    - `HomePage`: an M3 search bar with `role="search"`, a 56dp pill and the query kept in `?q=`. The signature `KbAnswerPanel` on `primary-container` has inline `[n]` markers linked to `/help/:slug`, numbered source chips, a skeleton while loading, and no-answer and 503 states that each offer "Send a request". "Your requests" is a divided list, not cards, with subject + human status line, status chip and relative time + `TCK-` ref in separate columns.
+    - `NewRequestPage`: subject, details, and an optional attachment with a client-side type/10 MB check. The query is prefilled from the KB panel.
+    - `RequestPage`: public thread only; staff are shown as "Tara from Support". Attachment download goes through the authed client. The reply box copy depends on state: pending → "We're waiting on your reply to continue."; resolved → "Reply within 72h to reopen this request.", with the window from the API's new `reopen_until`, so it follows `RESOLVED_COOLOFF_HOURS`; closed → "Replying starts a new request.", which navigates to the linked follow-up.
+    - `ArticlePage`: the source-link target.
+  - Optimistic "We're reviewing this" state: `RequestPage` polls every 3s while `status == "new"`, for up to 30s per ticket (the page is keyed by id), then falls back to refetch-on-focus. Category and priority chips appear, with `aria-live`, when the worker's triage lands.
+  - Backend additions this phase:
+    - `GET /categories`, which lists all categories for display names.
+    - `CommentOut.author_name`/`author_role`, where customers get staff first names only and the author is loaded explicitly (`selectinload`, `lazy="raise"`).
+    - `TicketDetailPublic.reopen_until`.
+    - Tests: `test_thread_carries_author_names_and_categories_are_listed` and `test_customers_see_staff_first_names_and_reopen_window`. `pytest` → **132 passed**, and ruff is clean.
+  - `npm run typecheck` is clean and `npm run build` succeeds. `vitest` → **14 passed**; `src/lib/enduser.test.ts` covers `replyMode` for resolved within/after the server window (including a 24h configuration), closed, pending and active, plus customer status copy, `parseAnswer` marker splitting and out-of-range drop, `ticketRef` and `relativeTime`.
+  - Playwright → **10 passed** in total. `e2e/phase7-enduser.spec.ts`:
+    - **register → KB search** "I forgot my password and the reset email never came" → the answer region is visible, with the "Source 1: Resetting your password" marker and a source chip whose `href="/help/resetting-your-password"`. Clicking the chip opens the article. An irrelevant query shows "No help article answers this yet".
+    - **submit** "Charged twice this month" with a `.txt` attachment → the page shows **"Billing"** and **"High priority"** chips once the real worker triage lands, plus the attachment. The request is listed on home.
+    - A second test drives an agent through the API (assign → open → in_progress → reply → pending) and checks "Waiting on you" plus the pending copy. It then replies (→ In progress), resolves (→ "Reply within 72h to reopen this request." / "Reopen with reply"), closes (→ closed copy), and replies again, which lands on a follow-up with a "Follow-up to TCK-…" link and a toast.
+  - Screenshots in `docs/screenshots/phase-7/`: `home-empty-1280`, `home-answer-{1280,360}`, `home-answer-dark-1280`, `home-no-answer-1280`, `article-1280`, `new-request-1280`, `request-triaged-1280`, `request-pending-{1280,360}`, `request-pending-dark-360`, `request-resolved-1280`, `home-with-requests-{1280,360}`.
+  - Screenshot critique, all fixed:
+    - The 1280 answer panel had been captured mid-reveal. The screenshot helper now waits two frames and then for finite animations to finish.
+    - The "Request sent" toast repeated on reload, because router state persists. The state is now cleared after it's read.
+    - "Send reply" was disabled until you typed, the same inert look as on login. It's now enabled with on-submit validation.
+    - The dark-mode capture had caught a theme transition. Confirmed as a capture timing issue, not a colour bug.
+    - The search input was only 32px tall inside the 56px bar. It now fills the bar.
+  - **`material-3` audit: [docs/audits/phase-7-md3.md](docs/audits/phase-7-md3.md), 85/100, every category ≥ 8** (lowest: Typography, Shape, Components, Layout, Navigation and Motion at 8). Evidence includes `@axe-core/playwright` WCAG 2.2 AA → **0 violations** across 10 scans (5 screens × light/dark; `e2e/phase7-a11y.spec.ts`), after fixing the one contrast failure it found (the panel footer at an 85% colour mix). Also: no hex/rgba outside `theme/`, every radius a shape token, no shadows, and 48dp hit areas.
+  - Code review (`code-review` at high) found 10 issues, all fixed:
+    - `RequestPage` kept toast and poll state across ticket ids → remounted per id.
+    - The screenshot wait would hang on infinite animations → filtered to finite ones.
+    - Unhandled `mutateAsync` rejections → switched to `mutate` + `onSuccess`.
+    - A tickets-query error showed the empty state → error state with a retry.
+    - The hardcoded 72h window → `reopen_until` from the server.
+    - Download bypassed the client's 401 handling and revoked the URL too early → `apiBlob` + delayed revoke.
+    - The always-joined comment author and full staff names sent to customers → explicit load + first names.
+    - A 40px hit area on small buttons → `-8px` inset.
+    - The unencoded article slug and the duplicated query threshold → encoded + `MIN_QUERY`.
 
 ### Phase 8 — Agent console (dense, data-forward)
 - [ ] Nav rail (Queue, Dashboard; Admin if admin). Queue = filter chips (status, priority, assignee incl. "Mine"/"Unassigned", category) + a dense table with ID (tabular figures), subject + AI one-liner, requester, priority, status, **SLA indicator**, assignee, updated. The URL holds the filter state. Keyboard: `j/k` to move, `Enter` to open.

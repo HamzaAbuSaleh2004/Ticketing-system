@@ -1,9 +1,10 @@
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+from app.models.user import User
 
 
 class TicketComment(Base):
@@ -17,3 +18,15 @@ class TicketComment(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+    # lazy="raise": async sessions can't lazy-load, so callers that need
+    # author names load them explicitly (selectinload) or set `author`.
+    author: Mapped[User] = relationship(lazy="raise")
+
+    @property
+    def author_name(self) -> str:
+        return self.author.name
+
+    @property
+    def author_role(self) -> str:
+        return self.author.role.value

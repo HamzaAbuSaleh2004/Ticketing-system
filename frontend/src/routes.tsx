@@ -1,11 +1,15 @@
 import { Box, Button, Typography } from "@mui/material";
-import { createBrowserRouter, Link as RouterLink, Outlet, type RouteObject } from "react-router-dom";
+import { createBrowserRouter, Link as RouterLink, Outlet, useParams, type RouteObject } from "react-router-dom";
 import { LoginPage } from "./auth/LoginPage";
 import { RegisterPage } from "./auth/RegisterPage";
 import { RoleGate } from "./auth/RoleGate";
 import { TokensPage } from "./dev/TokensPage";
 import { AgentShell } from "./portals/agent/AgentShell";
+import { ArticlePage } from "./portals/enduser/ArticlePage";
 import { EndUserShell } from "./portals/enduser/EndUserShell";
+import { HomePage } from "./portals/enduser/HomePage";
+import { NewRequestPage } from "./portals/enduser/NewRequestPage";
+import { RequestPage } from "./portals/enduser/RequestPage";
 import { sys } from "./theme/scheme";
 
 function Placeholder({ title }: { title: string }) {
@@ -14,6 +18,13 @@ function Placeholder({ title }: { title: string }) {
       <Typography variant="headlineMedium">{title}</Typography>
     </Box>
   );
+}
+
+// Keyed by id: moving to another request (a follow-up, a linked parent)
+// starts fresh triage polling and shows that request's own toast.
+function RequestRoute() {
+  const { id } = useParams();
+  return <RequestPage key={id} />;
 }
 
 function NotFound() {
@@ -39,7 +50,12 @@ const routes: RouteObject[] = [
         <EndUserShell />
       </RoleGate>
     ),
-    children: [{ path: "/", element: <Placeholder title="How can we help?" /> }],
+    children: [
+      { path: "/", element: <HomePage /> },
+      { path: "/requests/new", element: <NewRequestPage /> },
+      { path: "/requests/:id", element: <RequestRoute /> },
+      { path: "/help/:slug", element: <ArticlePage /> },
+    ],
   },
   {
     element: (
