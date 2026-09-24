@@ -1,0 +1,674 @@
+{
+  "version": 1,
+  "notes": "Demo tickets for SEED_DEMO=true. All times are minutes before seed time. See README.md in this folder.",
+  "tickets": [
+    {
+      "ref": "t24",
+      "subject": "Refund for downgrading from the annual plan",
+      "description": "We moved from the annual Team plan to monthly last week because we're cutting the team down to three people. The plan page said unused months would be refunded, but the invoice I got shows the full annual amount with no credit. Can you tell me how much we're getting back and when?",
+      "requester_email": "user2@ticketing.demo",
+      "assignee_email": "agent2@ticketing.demo",
+      "status": "closed",
+      "priority": "high",
+      "category": "billing",
+      "created_minutes_ago": 15000,
+      "resolved_minutes_ago": 11000,
+      "closed_minutes_ago": 10000,
+      "ai_summary": "Customer downgraded annual to monthly and hasn't seen the prorated refund.",
+      "comments": [
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Hi Leo, thanks for the details. The downgrade went through, but the proration job didn't run for your workspace. I'm fixing that now and will confirm the refund amount shortly.",
+          "is_internal_note": false,
+          "minutes_ago": 14960
+        },
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Proration job failed on this workspace because the billing address has no postcode. Ran it by hand after adding the postcode from their last invoice.",
+          "is_internal_note": true,
+          "minutes_ago": 14700
+        },
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Done: a refund of $312.00 for the nine unused months has been issued to the card ending 4417. Banks usually take 5 to 10 business days to show it. I've also added the missing postcode to your billing address so next month's invoice is correct.",
+          "is_internal_note": false,
+          "minutes_ago": 11000
+        }
+      ]
+    },
+    {
+      "ref": "t23",
+      "subject": "Email notifications stopped arriving",
+      "description": "Since around Tuesday I'm not getting any email when someone mentions me or assigns me a task. In-app notifications still show up fine. I checked spam and there's nothing there. My notification settings haven't changed.",
+      "requester_email": "user1@ticketing.demo",
+      "assignee_email": "agent1@ticketing.demo",
+      "status": "closed",
+      "priority": "normal",
+      "category": "technical-issue",
+      "created_minutes_ago": 12000,
+      "resolved_minutes_ago": 9000,
+      "closed_minutes_ago": 4680,
+      "ai_summary": "Mention and assignment emails stopped; in-app notifications still work.",
+      "comments": [
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Hi Uma, I can see our mail provider marked your address as bouncing after a delivery failure on Tuesday, so it stopped sending to you. Could you check whether your mailbox was full or your mail server had an outage around then?",
+          "is_internal_note": false,
+          "minutes_ago": 11820
+        },
+        {
+          "author_email": "user1@ticketing.demo",
+          "body": "Our IT team says the mail server was down for a couple of hours on Tuesday morning. It's been fine since.",
+          "is_internal_note": false,
+          "minutes_ago": 9400
+        },
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "That explains it. I've cleared the bounce flag on your address, and I sent a test notification a minute ago. You should have it now. I'll mark this resolved; reply here if emails stop again.",
+          "is_internal_note": false,
+          "minutes_ago": 9000
+        }
+      ]
+    },
+    {
+      "ref": "t22",
+      "subject": "Typo in the welcome email for new teammates",
+      "description": "Small thing: the welcome email new teammates get says \"Your workpsace is ready\". A new hire pointed it out to me this morning.",
+      "requester_email": "user2@ticketing.demo",
+      "assignee_email": "agent2@ticketing.demo",
+      "status": "resolved",
+      "priority": "low",
+      "category": "other",
+      "created_minutes_ago": 4000,
+      "resolved_minutes_ago": 600,
+      "ai_summary": "Spelling mistake in the teammate welcome email subject line.",
+      "comments": [
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Good catch, thanks Leo. I've passed it to the team that owns our email templates.",
+          "is_internal_note": false,
+          "minutes_ago": 3700
+        },
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "The template fix shipped this morning. Anyone you invite from now on will get the corrected email.",
+          "is_internal_note": false,
+          "minutes_ago": 600
+        }
+      ]
+    },
+    {
+      "ref": "t19",
+      "subject": "Which third parties can see our data?",
+      "description": "Our procurement team needs a list of every third party that processes our data before we renew. Is there a subprocessor list somewhere, and does it say which countries the data is stored in?",
+      "requester_email": "user2@ticketing.demo",
+      "assignee_email": "agent1@ticketing.demo",
+      "status": "pending",
+      "priority": "low",
+      "category": "data-privacy",
+      "created_minutes_ago": 3000,
+      "pending_minutes": 1200,
+      "ai_summary": "Procurement asking for the subprocessor list and data locations.",
+      "comments": [
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Hi Leo, happy to help with this. I'm checking with our privacy team which version of the list we can share before your renewal.",
+          "is_internal_note": false,
+          "minutes_ago": 2780
+        },
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Hi Leo, we only share data with the infrastructure providers needed to run the service. I can send the full subprocessor list, but it's covered by our NDA. Could you confirm the name and email of the person at your company who should receive it?",
+          "is_internal_note": false,
+          "minutes_ago": 1200
+        }
+      ]
+    },
+    {
+      "ref": "t20",
+      "subject": "Invoice PDF downloads as a blank page",
+      "description": "When I download last month's invoice from the Billing tab, the PDF opens but every page is blank. Older invoices download fine. I need it for our expense report by Friday.",
+      "requester_email": "user1@ticketing.demo",
+      "assignee_email": "agent1@ticketing.demo",
+      "status": "resolved",
+      "priority": "normal",
+      "category": "billing",
+      "created_minutes_ago": 2900,
+      "resolved_minutes_ago": 1500,
+      "ai_summary": "Latest invoice PDF renders blank; older invoices download correctly.",
+      "comments": [
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Hi Uma, thanks for flagging this. Which browser are you using, and does the same thing happen if you download it in a private window?",
+          "is_internal_note": false,
+          "minutes_ago": 2800
+        },
+        {
+          "author_email": "user1@ticketing.demo",
+          "body": "Chrome. Same thing in a private window, and my colleague gets a blank PDF too.",
+          "is_internal_note": false,
+          "minutes_ago": 2600
+        },
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Two other customers have reported the same invoice run. Engineering found the PDF renderer timed out on invoices with more than 20 line items. Fix is going out today.",
+          "is_internal_note": true,
+          "minutes_ago": 2100
+        },
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Thanks, that helped us find it. Invoices with a lot of line items were being cut off when the PDF was generated. That's fixed, and I've regenerated your invoice. If you download it again from the Billing tab, it should show all 23 lines.",
+          "is_internal_note": false,
+          "minutes_ago": 1500
+        }
+      ]
+    },
+    {
+      "ref": "t08",
+      "subject": "Is there a dark mode for the mobile app?",
+      "description": "Several people on my team use the mobile app at night and have asked whether there's a dark mode. I couldn't find one in settings. If it's not there yet, is it planned?",
+      "requester_email": "user2@ticketing.demo",
+      "assignee_email": "agent2@ticketing.demo",
+      "status": "open",
+      "priority": "low",
+      "category": "other",
+      "created_minutes_ago": 3500,
+      "ai_summary": "Team asking whether the mobile app has or will get a dark mode.",
+      "comments": [
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Hi Leo, the mobile app follows your phone's system theme since version 4.2. If your team is on an older version, updating should give them dark mode automatically. Let me check which versions they're on.",
+          "is_internal_note": false,
+          "minutes_ago": 3200
+        }
+      ]
+    },
+    {
+      "ref": "t21",
+      "subject": "All admins locked out after SSO change",
+      "description": "None of our admins can sign in since this morning. Okta shows the login as successful, but we land back on your sign-in page with \"Your session could not be verified\". Regular members who use passwords can still get in. We can't manage users or billing until this is fixed.",
+      "requester_email": "user2@ticketing.demo",
+      "assignee_email": "agent3@ticketing.demo",
+      "status": "resolved",
+      "priority": "urgent",
+      "category": "account-login",
+      "created_minutes_ago": 1700,
+      "resolved_minutes_ago": 1300,
+      "ai_summary": "Every SSO admin is locked out; SAML session verification fails.",
+      "comments": [
+        {
+          "author_email": "agent3@ticketing.demo",
+          "body": "Hi Leo, I'm on this now. Your SAML signing certificate on our side expired at midnight UTC. Could you send the new certificate from Okta (Applications, then Sign On, then SAML Signing Certificates)?",
+          "is_internal_note": false,
+          "minutes_ago": 1690
+        },
+        {
+          "author_email": "user2@ticketing.demo",
+          "body": "Attached the new certificate as a .cer file. Sorry, we rotated it on our end last week and forgot to update it here.",
+          "is_internal_note": false,
+          "minutes_ago": 1600
+        },
+        {
+          "author_email": "agent3@ticketing.demo",
+          "body": "Installed the new cert and confirmed a test SAML assertion validates. Suggested they add a calendar reminder for the next rotation.",
+          "is_internal_note": true,
+          "minutes_ago": 1320
+        },
+        {
+          "author_email": "agent3@ticketing.demo",
+          "body": "The new certificate is installed and admin sign-in is working again. I checked with a test login from your Okta tenant. If anyone still sees the error, ask them to close the tab and sign in again.",
+          "is_internal_note": false,
+          "minutes_ago": 1300
+        }
+      ]
+    },
+    {
+      "ref": "t12",
+      "subject": "Pages take 20+ seconds to load from our office",
+      "description": "For the last two days every page takes 20 to 30 seconds to load when we're in the office. At home on the same laptops it's fast. We're on a corporate VPN in the office. Nothing changed on our side that I know of.",
+      "requester_email": "user1@ticketing.demo",
+      "assignee_email": "agent1@ticketing.demo",
+      "status": "in_progress",
+      "priority": "normal",
+      "category": "technical-issue",
+      "created_minutes_ago": 1560,
+      "ai_summary": "Very slow page loads only on the office VPN; fine on home networks.",
+      "comments": [
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Hi Uma, since it's only slow on the office network, it's most likely how the VPN routes traffic to us. Could you run a traceroute to app.ticketing.demo from the office and paste the output here?",
+          "is_internal_note": false,
+          "minutes_ago": 1440
+        },
+        {
+          "author_email": "user1@ticketing.demo",
+          "body": "Here it is. Our IT person says hop 9 looks odd, it goes through Frankfurt even though we're in Dublin.\n\n 9  fra-edge-02.corp-vpn.net  212.4 ms",
+          "is_internal_note": false,
+          "minutes_ago": 900
+        },
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Their VPN exit is in Frankfurt and it's hitting our old EU edge, which we're retiring. Asked networking whether we can pin them to the Dublin edge while their IT fixes the split tunnel.",
+          "is_internal_note": true,
+          "minutes_ago": 700
+        }
+      ]
+    },
+    {
+      "ref": "t17",
+      "subject": "Report builder crashes when I add a date filter",
+      "description": "Every time I add a \"Created date\" filter to a report, the builder shows \"Something went wrong\" and loses my changes. It happens on the saved report called Q3 pipeline and on new reports too. Reference code on the error screen: RB-5521-A.",
+      "requester_email": "user2@ticketing.demo",
+      "assignee_email": "agent1@ticketing.demo",
+      "status": "pending",
+      "priority": "normal",
+      "category": "technical-issue",
+      "created_minutes_ago": 1400,
+      "pending_minutes": 300,
+      "ai_summary": "Report builder errors when a created-date filter is added (RB-5521-A).",
+      "comments": [
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Hi Leo, thanks for including the reference code. It points to a timezone conversion error in the filter.",
+          "is_internal_note": false,
+          "minutes_ago": 1300
+        },
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Can reproduce only when the workspace timezone is set to one with a half-hour offset. Theirs is Asia/Kolkata. Bug filed as REP-882.",
+          "is_internal_note": true,
+          "minutes_ago": 1000
+        },
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "We've found the cause and a fix is scheduled. In the meantime, could you try changing your personal timezone (Profile, then Preferences) to UTC and adding the filter again? Let me know if that gets you unblocked.",
+          "is_internal_note": false,
+          "minutes_ago": 300
+        }
+      ]
+    },
+    {
+      "ref": "t13",
+      "subject": "SSO sign-in loops back to the login page",
+      "description": "Since we switched to single sign-on yesterday, about half of our team gets sent back to the sign-in page after authenticating in Okta. It keeps looping. The others sign in fine. Clearing cookies didn't help. We have 40 people who can't get in right now.",
+      "requester_email": "user2@ticketing.demo",
+      "assignee_email": "agent2@ticketing.demo",
+      "status": "in_progress",
+      "priority": "normal",
+      "category": "account-login",
+      "created_minutes_ago": 1200,
+      "ai_summary": "After SSO rollout, half the team loops between Okta and the sign-in page.",
+      "ai_triage": {
+        "category": "technical-issue",
+        "priority": "normal",
+        "one_line_summary": "After SSO rollout, half the team loops between Okta and the sign-in page.",
+        "suggested_response_draft": "Hi Leo, thanks for the detail on who's affected. A sign-in loop right after an SSO rollout usually means the reply URL in your identity provider doesn't match the one we expect. Could you check the Assertion Consumer Service URL in your Okta app settings and confirm it's set to https://app.ticketing.demo/sso/acs? If it still points at your old domain, updating it should fix the loop for everyone.",
+        "accepted_fields": [
+          "priority",
+          "one_line_summary"
+        ]
+      },
+      "comments": [
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Hi Leo, sorry about the disruption. Could you tell me whether the people who can't get in were already signed in before the switch, or are they all new sessions?",
+          "is_internal_note": false,
+          "minutes_ago": 1030
+        },
+        {
+          "author_email": "user2@ticketing.demo",
+          "body": "Looks like it's the people who were already signed in with a password before we turned SSO on. New people and anyone who logged out first are fine.",
+          "is_internal_note": false,
+          "minutes_ago": 400
+        },
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Their Okta app's ACS URL still points at their old vanity domain, and old password sessions keep that domain in the cookie. Checking with Sasha before I ask them to change it, since it logs everyone out.",
+          "is_internal_note": true,
+          "minutes_ago": 240
+        }
+      ]
+    },
+    {
+      "ref": "t16",
+      "subject": "VAT missing from my invoice after I moved",
+      "description": "I moved from Ireland to the Netherlands two months ago and updated my billing address. This month's invoice has no VAT line at all, and my accountant says it needs to show Dutch VAT. Can you reissue it?",
+      "requester_email": "user1@ticketing.demo",
+      "assignee_email": "agent2@ticketing.demo",
+      "status": "in_progress",
+      "priority": "normal",
+      "category": "billing",
+      "created_minutes_ago": 600,
+      "pending_minutes": 180,
+      "ai_summary": "Invoice after a move to the Netherlands has no VAT line; needs reissue.",
+      "comments": [
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Hi Uma, tax is based on the billing address, so this should have switched over. Could you confirm whether you added a VAT number when you updated the address? If you entered one, we treat the account as a business and don't charge VAT.",
+          "is_internal_note": false,
+          "minutes_ago": 500
+        },
+        {
+          "author_email": "user1@ticketing.demo",
+          "body": "I did enter one, but it's my old Irish VAT number, not a Dutch one. I don't have a Dutch VAT number, it's a personal account.",
+          "is_internal_note": false,
+          "minutes_ago": 320
+        },
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Thanks, that's the cause. I've removed the old VAT number and I'm reissuing the invoice with Dutch VAT now.",
+          "is_internal_note": false,
+          "minutes_ago": 150
+        }
+      ]
+    },
+    {
+      "ref": "t15",
+      "subject": "Please add Arabic as an interface language",
+      "description": "About a third of our support staff would prefer to work in Arabic. Is Arabic on the roadmap for the interface, including right-to-left layout? We'd switch our whole Gulf office over.",
+      "requester_email": "user2@ticketing.demo",
+      "assignee_email": "agent1@ticketing.demo",
+      "status": "in_progress",
+      "priority": "low",
+      "category": "other",
+      "created_minutes_ago": 900,
+      "ai_summary": "Request for an Arabic interface with right-to-left layout support.",
+      "comments": [
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Hi Leo, thanks for asking. Arabic isn't available yet. I've passed your request, and the size of the office, to our product team, and I'm finding out whether it's scheduled.",
+          "is_internal_note": false,
+          "minutes_ago": 700
+        }
+      ]
+    },
+    {
+      "ref": "t11",
+      "subject": "Charged for 14 seats but we only have 6 people",
+      "description": "This month's invoice charges us for 14 seats. We have 6 people in the workspace and nobody has been added in months. That's more than double what we normally pay, and the payment already went through. I need this corrected before our finance close.",
+      "requester_email": "user2@ticketing.demo",
+      "assignee_email": "agent3@ticketing.demo",
+      "status": "in_progress",
+      "priority": "urgent",
+      "category": "billing",
+      "escalated": true,
+      "created_minutes_ago": 320,
+      "ai_summary": "Invoice bills 14 seats for a 6-person workspace; payment already taken.",
+      "comments": [
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Hi Leo, I can see the 14 seats on this month's invoice. I'm checking when the extra 8 were added and by whom.",
+          "is_internal_note": false,
+          "minutes_ago": 312
+        },
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Audit log shows 8 seats added by an admin account that was deleted last month. A refund this size is above my limit, so I'm escalating to Sasha.",
+          "is_internal_note": true,
+          "minutes_ago": 290
+        },
+        {
+          "author_email": "agent3@ticketing.demo",
+          "body": "Hi Leo, I'm Sasha from the senior support team and I've taken this over. The extra seats were added by a former admin's account before it was removed. I've taken them off so next month is back to 6. I'm now arranging a refund for the 8 seats you were charged for.",
+          "is_internal_note": false,
+          "minutes_ago": 200
+        },
+        {
+          "author_email": "user2@ticketing.demo",
+          "body": "Thanks. For the record, nobody here approved those seats. How long will the refund take?",
+          "is_internal_note": false,
+          "minutes_ago": 150
+        },
+        {
+          "author_email": "agent3@ticketing.demo",
+          "body": "Credit note drafted for 8 seats for one month. Waiting on finance sign-off, which they promised by end of day.",
+          "is_internal_note": true,
+          "minutes_ago": 60
+        }
+      ]
+    },
+    {
+      "ref": "t07",
+      "subject": "Password reset email never arrives",
+      "description": "I've clicked \"Forgot password\" three times in the last hour and nothing has arrived. Not in spam either. I'm signed out on my laptop and can't get back in.",
+      "requester_email": "user1@ticketing.demo",
+      "assignee_email": "agent1@ticketing.demo",
+      "status": "open",
+      "priority": "normal",
+      "category": "account-login",
+      "created_minutes_ago": 300,
+      "ai_summary": "Password reset emails aren't arriving after several attempts.",
+      "comments": [
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Hi Uma, several reset requests in a short time temporarily rate-limit the address, so the later ones won't send. I've cleared the limit on your account. Please request one more reset now; the link is valid for 30 minutes.",
+          "is_internal_note": false,
+          "minutes_ago": 250
+        }
+      ]
+    },
+    {
+      "ref": "t18",
+      "subject": "Two-factor codes rejected on my new phone",
+      "description": "I moved my authenticator app to a new phone. Now every code I enter says \"Invalid code\", even right after it refreshes. I still have my old phone but it's been reset.",
+      "requester_email": "user1@ticketing.demo",
+      "assignee_email": "agent2@ticketing.demo",
+      "status": "pending",
+      "priority": "high",
+      "category": "account-login",
+      "created_minutes_ago": 240,
+      "pending_minutes": 150,
+      "ai_summary": "Authenticator codes rejected after moving the app to a new phone.",
+      "comments": [
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Hi Uma, codes that fail right after they refresh usually mean the phone's clock is slightly off. Could you check that your new phone's date and time are set to automatic, then try a fresh code?",
+          "is_internal_note": false,
+          "minutes_ago": 210
+        },
+        {
+          "author_email": "user1@ticketing.demo",
+          "body": "It was already on automatic. Still getting \"Invalid code\".",
+          "is_internal_note": false,
+          "minutes_ago": 180
+        },
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Thanks for checking. I can reset two-factor on your account so you can set it up fresh on the new phone. Before I do, please reply with the last four digits of the card on your account so I can confirm it's you.",
+          "is_internal_note": false,
+          "minutes_ago": 150
+        }
+      ]
+    },
+    {
+      "ref": "t04",
+      "subject": "Export to CSV times out on large reports",
+      "description": "Exporting our Monthly activity report to CSV spins for about a minute and then says \"Export failed\". Smaller reports export fine. This one has roughly 80,000 rows. We need the file for an audit next week.",
+      "requester_email": "user2@ticketing.demo",
+      "assignee_email": null,
+      "status": "triaged",
+      "priority": "normal",
+      "category": "technical-issue",
+      "created_minutes_ago": 200,
+      "ai_summary": "CSV export of an ~80k-row report fails after about a minute.",
+      "ai_triage": {
+        "category": "technical-issue",
+        "priority": "normal",
+        "one_line_summary": "CSV export of an ~80k-row report fails after about a minute.",
+        "suggested_response_draft": "Hi Leo, thanks for the report. Exports over about 50,000 rows can hit our time limit when they're generated in the browser. While we look into it, you can split the export by date range, or use Schedule export, which builds large files in the background and emails you a download link.",
+        "accepted_fields": []
+      },
+      "comments": []
+    },
+    {
+      "ref": "t14",
+      "subject": "I think someone else signed in to my account",
+      "description": "I got an email saying there was a new sign-in from Lagos. I've never been there and I was asleep at the time. I changed my password straight away. Can you check whether anything was viewed or changed?",
+      "requester_email": "user1@ticketing.demo",
+      "assignee_email": "agent3@ticketing.demo",
+      "status": "in_progress",
+      "priority": "high",
+      "category": "data-privacy",
+      "escalated": true,
+      "created_minutes_ago": 180,
+      "ai_summary": "Unrecognised sign-in from Lagos; customer wants to know what was accessed.",
+      "comments": [
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Hi Uma, changing your password was the right move, and it has signed out every other session. I'm pulling the activity for that sign-in now.",
+          "is_internal_note": false,
+          "minutes_ago": 170
+        },
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Session from the Lagos IP opened two tickets and exported the contact list. That's a possible data exposure, so I'm escalating to Sasha for the security review.",
+          "is_internal_note": true,
+          "minutes_ago": 140
+        },
+        {
+          "author_email": "agent3@ticketing.demo",
+          "body": "Hi Uma, I'm Sasha, and I'm handling this with our security team. I can confirm the sign-in wasn't yours. I'll send you a full list of what that session accessed within the next few hours. Please also turn on two-factor authentication under Account Settings if you haven't already.",
+          "is_internal_note": false,
+          "minutes_ago": 90
+        }
+      ]
+    },
+    {
+      "ref": "t10",
+      "subject": "Requesting a full export of my data",
+      "description": "I'd like a copy of all the personal data you hold about me, including ticket history and any logs. Please send it in a format I can open without special software.",
+      "requester_email": "user1@ticketing.demo",
+      "assignee_email": "agent2@ticketing.demo",
+      "status": "open",
+      "priority": "high",
+      "category": "data-privacy",
+      "created_minutes_ago": 120,
+      "ai_summary": "Customer requests a full export of their personal data.",
+      "comments": [
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Hi Uma, I've started the export. You'll get a ZIP containing CSV and JSON files, which open in any spreadsheet or text editor. I'll send the download link here once it's ready.",
+          "is_internal_note": false,
+          "minutes_ago": 100
+        }
+      ]
+    },
+    {
+      "ref": "t05",
+      "subject": "Please delete my old test account",
+      "description": "I made a second account (uma.test@) when we were trialling the product last year. I don't need it any more. Please delete it and everything in it. My main account should stay as it is.",
+      "requester_email": "user1@ticketing.demo",
+      "assignee_email": null,
+      "status": "triaged",
+      "priority": "low",
+      "category": "data-privacy",
+      "created_minutes_ago": 90,
+      "ai_summary": "Delete a secondary trial account and its data; keep the main account.",
+      "ai_triage": {
+        "category": "data-privacy",
+        "priority": "low",
+        "one_line_summary": "Delete a secondary trial account and its data; keep the main account.",
+        "suggested_response_draft": "Hi Uma, I can do that for you. Deletion removes the test account and everything in it within 30 days, and your main account won't be affected. Before I start, please reply from the test account's email address, or confirm its full address here, so I can verify it's yours.",
+        "accepted_fields": []
+      },
+      "comments": []
+    },
+    {
+      "ref": "t25",
+      "parent_ref": "t24",
+      "subject": "Refund still not on my card statement",
+      "description": "Following up on my downgrade refund. You confirmed $312.00 was issued, but it's been eight business days and it isn't on the card statement yet. Can you send me a reference number I can give my bank?",
+      "requester_email": "user2@ticketing.demo",
+      "assignee_email": "agent2@ticketing.demo",
+      "status": "open",
+      "priority": "normal",
+      "category": "billing",
+      "created_minutes_ago": 60,
+      "ai_summary": "Follow-up: confirmed refund hasn't reached the card after eight business days.",
+      "comments": [
+        {
+          "author_email": "agent2@ticketing.demo",
+          "body": "Hi Leo, the refund reference is RF-20931-LT. Our payment processor shows it as sent. If your bank can't find it with that reference, let me know and I'll ask the processor for a trace.",
+          "is_internal_note": false,
+          "minutes_ago": 40
+        }
+      ]
+    },
+    {
+      "ref": "t09",
+      "subject": "Dashboard shows an error screen for everyone",
+      "description": "Nobody on our team can open the dashboard. We all get \"We couldn't load this page\" with reference code DB-7F3A-19. Other pages work. We run our morning stand-up from the dashboard, so this is blocking the whole team.",
+      "requester_email": "user2@ticketing.demo",
+      "assignee_email": "agent1@ticketing.demo",
+      "status": "open",
+      "priority": "urgent",
+      "category": "technical-issue",
+      "created_minutes_ago": 40,
+      "ai_summary": "Dashboard fails for the whole workspace with reference DB-7F3A-19.",
+      "comments": [
+        {
+          "author_email": "agent1@ticketing.demo",
+          "body": "Hi Leo, thanks for the reference code. It shows a dashboard widget failing to load for your workspace. I'm working on it now and will update you within 30 minutes.",
+          "is_internal_note": false,
+          "minutes_ago": 33
+        }
+      ]
+    },
+    {
+      "ref": "t06",
+      "subject": "Payment failed and our workspace is restricted",
+      "description": "We got an email that our payment failed and now the workspace is in read-only mode. Our card was replaced by the bank last week, which is probably why. I've tried to add the new card but the Billing tab is read-only too. We can't create tickets for our own customers.",
+      "requester_email": "user2@ticketing.demo",
+      "assignee_email": null,
+      "status": "triaged",
+      "priority": "high",
+      "category": "billing",
+      "created_minutes_ago": 20,
+      "ai_summary": "Workspace restricted after a failed payment; can't update card in read-only mode.",
+      "ai_triage": {
+        "category": "billing",
+        "priority": "urgent",
+        "one_line_summary": "Workspace restricted after a failed payment; can't update card in read-only mode.",
+        "suggested_response_draft": "Hi Leo, sorry about that. When a workspace is restricted, only the account owner can update the card. If you're not the owner, I can lift the restriction for 24 hours so anyone with billing access can add the new card. Would you like me to do that?",
+        "accepted_fields": []
+      },
+      "comments": []
+    },
+    {
+      "ref": "t02",
+      "subject": "Locked out after changing phones, no backup codes",
+      "description": "I got a new phone and didn't move my authenticator app first. I can't sign in without the code, and I can't find my backup codes. I'm the only admin on our account.",
+      "requester_email": "user2@ticketing.demo",
+      "assignee_email": null,
+      "status": "new",
+      "priority": "normal",
+      "category": null,
+      "created_minutes_ago": 14,
+      "comments": []
+    },
+    {
+      "ref": "t01",
+      "subject": "Charged twice this month",
+      "description": "My card shows two charges of $49.00 from you a day apart, but there's only one invoice in the Billing tab. Nobody else on my account has access to billing. Please refund the duplicate.",
+      "requester_email": "user1@ticketing.demo",
+      "assignee_email": null,
+      "status": "new",
+      "priority": "normal",
+      "category": null,
+      "created_minutes_ago": 6,
+      "comments": []
+    },
+    {
+      "ref": "t03",
+      "subject": "Can I rename my workspace?",
+      "description": "We rebranded and I'd like the workspace name and the web address to match the new name. Is that something I can do myself, and will old links stop working?",
+      "requester_email": "user1@ticketing.demo",
+      "assignee_email": null,
+      "status": "new",
+      "priority": "normal",
+      "category": null,
+      "created_minutes_ago": 3,
+      "comments": []
+    }
+  ]
+}

@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ticketing Portal mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Axis tags verified against fonts.google.com metadata (2026-09-24) -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght,ROND@6..144,100..1000,0..100&family=Roboto+Flex:opsz,wght@8..144,100..1000&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block">
+<link rel="stylesheet" href="m3-tokens.css">
+<link rel="stylesheet" href="mockup.css">
+<script>
+  // Apply the saved theme before first paint. "system" = no attribute.
+  try { const t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}
+  if (new URLSearchParams(location.search).has('bare')) document.documentElement.classList.add('bare-root');
+</script>
+</head>
+<body>
+
+<header class="mockbar" aria-label="Mockup navigation">
+  <span>Mockup screens</span>
+  <nav>
+    <a href="#home">End user: home</a>
+    <a href="#ticket">End user: resolved request</a>
+    <a href="#agent">Agent console</a>
+  </nav>
+</header>
+
+<!-- ================================================================
+     1. END-USER HOME
+     ================================================================ -->
+<div class="screen eu" id="screen-home">
+  <header class="eu-appbar">
+    <a class="eu-appbar__brand" href="#home"><span class="icon icon--fill" aria-hidden="true">support</span>Help</a>
+    <span class="eu-appbar__spacer"></span>
+    <div class="segmented only-wide" role="group" aria-label="Theme">
+      <button class="sl" data-theme-set="system" aria-pressed="true"><span class="icon check" aria-hidden="true">check</span><span class="icon mode-icon" aria-hidden="true">brightness_auto</span>System</button>
+      <button class="sl" data-theme-set="light" aria-pressed="false"><span class="icon check" aria-hidden="true">check</span><span class="icon mode-icon" aria-hidden="true">light_mode</span>Light</button>
+      <button class="sl" data-theme-set="dark" aria-pressed="false"><span class="icon check" aria-hidden="true">check</span><span class="icon mode-icon" aria-hidden="true">dark_mode</span>Dark</button>
+    </div>
+    <button class="icon-btn sl only-compact" data-theme-cycle aria-label="Theme: system. Change theme"><span class="icon" aria-hidden="true">brightness_auto</span></button>
+    <button class="icon-btn sl" aria-label="Account: Uma User"><span class="avatar">U</span></button>
+  </header>
+
+  <main class="eu-main">
+    <h1 class="eu-title display">What do you need help with?</h1>
+
+    <form class="searchbar" role="search" id="kb-search">
+      <span class="icon" aria-hidden="true">search</span>
+      <label class="visually-hidden" for="kb-q">Search help articles</label>
+      <input id="kb-q" type="search" value="I was charged twice this month" placeholder="Describe the problem in your own words" autocomplete="off">
+      <button type="button" class="icon-btn sl" aria-label="Clear search" id="kb-clear"><span class="icon" aria-hidden="true">close</span></button>
+    </form>
+
+    <section class="answer" id="answer" aria-live="polite" aria-labelledby="answer-h">
+      <div class="answer__skeleton" aria-hidden="true">
+        <div class="skel" style="width: 92%"></div>
+        <div class="skel" style="width: 86%"></div>
+        <div class="skel" style="width: 54%"></div>
+        <span class="skel skel--chip"></span><span class="skel skel--chip"></span>
+      </div>
+      <div class="answer__body">
+        <h2 class="answer__head" id="answer-h"><span class="icon" aria-hidden="true">menu_book</span>Answer from 2 help articles</h2>
+        <div class="answer__text">
+          <p>Each charge on your invoice maps to a plan or add-on that was active during the billing period, so a second charge usually means a teammate added a seat or add-on partway through the month. Partial months are prorated <span style="white-space: nowrap">automatically.<a class="cite" href="#src-1" aria-label="Source 1">1</a></span> Check the itemized breakdown on the invoice in the Billing tab to see what each charge covers.</p>
+          <p>If the charges still don't match what you signed up for, submit a request. Incorrect billing is handled with our fastest response <span style="white-space: nowrap">time.<a class="cite" href="#src-2" aria-label="Source 2">2</a></span></p>
+        </div>
+        <ol class="sources" aria-label="Sources">
+          <li><a class="source sl" id="src-1" href="#kb/understanding-your-monthly-invoice"><span class="source__n" aria-hidden="true">1</span>Understanding your monthly invoice</a></li>
+          <li><a class="source sl" id="src-2" href="#kb/contacting-support-what-to-expect"><span class="source__n" aria-hidden="true">2</span>Contacting support and what to expect</a></li>
+        </ol>
+        <div class="answer__foot">
+          <p class="answer__note">This answer only uses our help articles. Open a source to read it in full.</p>
+          <a class="btn btn--filled sl" href="#home"><span class="icon" aria-hidden="true">edit_square</span>Submit a request</a>
+        </div>
+      </div>
+    </section>
+
+    <div class="section-head">
+      <h2 class="headline">Your requests</h2>
+      <a class="fab-ext sl" href="#home"><span class="icon" aria-hidden="true">edit</span>New request</a>
+    </div>
+    <ul class="req-list" id="req-list" aria-label="Your requests"></ul>
+  </main>
+</div>
+
+<!-- ================================================================
+     2. END-USER TICKET VIEW (resolved)
+     ================================================================ -->
+<div class="screen eu" id="screen-ticket">
+  <header class="eu-appbar">
+    <a class="eu-appbar__brand" href="#home"><span class="icon icon--fill" aria-hidden="true">support</span>Help</a>
+    <span class="eu-appbar__spacer"></span>
+    <div class="segmented only-wide" role="group" aria-label="Theme">
+      <button class="sl" data-theme-set="system" aria-pressed="true"><span class="icon check" aria-hidden="true">check</span><span class="icon mode-icon" aria-hidden="true">brightness_auto</span>System</button>
+      <button class="sl" data-theme-set="light" aria-pressed="false"><span class="icon check" aria-hidden="true">check</span><span class="icon mode-icon" aria-hidden="true">light_mode</span>Light</button>
+      <button class="sl" data-theme-set="dark" aria-pressed="false"><span class="icon check" aria-hidden="true">check</span><span class="icon mode-icon" aria-hidden="true">dark_mode</span>Dark</button>
+    </div>
+    <button class="icon-btn sl only-compact" data-theme-cycle aria-label="Theme: system. Change theme"><span class="icon" aria-hidden="true">brightness_auto</span></button>
+    <button class="icon-btn sl" aria-label="Account: Uma User"><span class="avatar">U</span></button>
+  </header>
+
+  <main class="eu-main">
+    <a class="back sl" href="#home"><span class="icon" aria-hidden="true">arrow_back</span>Your requests</a>
+
+    <div class="tv-head">
+      <h1 class="tv-title headline">Invoice PDF downloads as a blank page</h1>
+      <span class="chip"><span class="icon" aria-hidden="true">check_circle</span>Resolved</span>
+    </div>
+    <div class="tv-meta">
+      <span class="num">TCK-01036</span>
+      <span>Opened 2 days ago</span>
+      <span>Handled by Tara Tier1</span>
+    </div>
+
+    <div class="tv-state" role="status">
+      <span class="icon" aria-hidden="true">schedule</span>
+      <div>
+        <strong>This request is resolved</strong>
+        <p>If the problem comes back, reply within 72h to reopen it. You have <span class="num">47</span> hours left. After that, replying starts a new request.</p>
+      </div>
+    </div>
+
+    <ol class="thread" aria-label="Conversation">
+      <li class="msg">
+        <span class="avatar" aria-hidden="true">U</span>
+        <div class="msg__who"><span class="msg__name">You</span><span class="msg__time">2 days ago</span></div>
+        <p class="msg__body">When I download last month's invoice from the Billing tab, the PDF opens but every page is blank. Older invoices download fine. I need it for our expense report by Friday.</p>
+      </li>
+      <li class="msg">
+        <span class="avatar avatar--tonal" aria-hidden="true">T</span>
+        <div class="msg__who"><span class="msg__name">Tara Tier1</span><span class="msg__role">Support</span><span class="msg__time">2 days ago</span></div>
+        <p class="msg__body">Hi Uma, thanks for flagging this. Which browser are you using, and does the same thing happen if you download it in a private window?</p>
+      </li>
+      <li class="msg">
+        <span class="avatar" aria-hidden="true">U</span>
+        <div class="msg__who"><span class="msg__name">You</span><span class="msg__time">2 days ago</span></div>
+        <p class="msg__body">Chrome. Same thing in a private window, and my colleague gets a blank PDF too.</p>
+      </li>
+      <li class="msg">
+        <span class="avatar avatar--tonal" aria-hidden="true">T</span>
+        <div class="msg__who"><span class="msg__name">Tara Tier1</span><span class="msg__role">Support</span><span class="msg__time">Yesterday</span></div>
+        <p class="msg__body">Thanks, that helped us find it. Invoices with a lot of line items were being cut off when the PDF was generated. That's fixed, and I've regenerated your invoice. If you download it again from the Billing tab, it should show all 23 lines.</p>
+      </li>
+    </ol>
+
+    <form class="composer" onsubmit="return false">
+      <label class="visually-hidden" for="eu-reply">Reply to Tara</label>
+      <textarea id="eu-reply" placeholder="Reply to Tara. Replying reopens this request."></textarea>
+      <div class="composer__bar">
+        <button type="button" class="icon-btn sl" aria-label="Attach a file"><span class="icon" aria-hidden="true">attach_file</span></button>
+        <button class="btn btn--filled sl" type="submit"><span class="icon" aria-hidden="true">send</span>Send and reopen</button>
+      </div>
+    </form>
+  </main>
+</div>
+
+<!-- ================================================================
+     3. AGENT CONSOLE
+     ================================================================ -->
+<div class="screen" id="screen-agent">
+  <div class="ag" id="ag">
+    <nav class="rail" aria-label="Main">
+      <div class="rail__items">
+        <a class="rail__item" href="#agent" aria-current="page"><span class="rail__ind sl"><span class="icon" aria-hidden="true">inbox</span><span class="badge" aria-label="2 breached">2</span></span>Queue</a>
+        <a class="rail__item" href="#agent"><span class="rail__ind sl"><span class="icon" aria-hidden="true">monitoring</span></span>Dashboard</a>
+      </div>
+      <div class="rail__foot">
+        <div class="theme-cycle">
+          <button class="icon-btn sl" data-theme-cycle aria-label="Theme: system. Change theme"><span class="icon" aria-hidden="true">brightness_auto</span></button>
+          <span data-theme-label>System</span>
+        </div>
+        <button class="icon-btn sl" aria-label="Account: Tom Tier1"><span class="avatar avatar--tonal">T</span></button>
+      </div>
+    </nav>
+
+    <!-- Queue pane -->
+    <section class="pane pane--queue" aria-labelledby="q-title">
+      <div class="pane-head">
+        <h1 class="pane-title" id="q-title">Queue</h1>
+        <span class="pane-count"><span class="num" id="q-count">14</span> tickets</span>
+        <button class="icon-btn sl only-compact-agent" data-theme-cycle aria-label="Theme: system. Change theme"><span class="icon" aria-hidden="true">brightness_auto</span></button>
+        <label class="queue-search"><span class="icon icon--sm" aria-hidden="true">search</span><span class="visually-hidden">Search tickets</span><input type="search" placeholder="Search tickets"></label>
+      </div>
+      <div class="filters" role="toolbar" aria-label="Filters">
+        <button class="filter-chip sl is-set">Status: Any<span class="icon" aria-hidden="true">arrow_drop_down</span></button>
+        <button class="filter-chip sl">Priority<span class="icon" aria-hidden="true">arrow_drop_down</span></button>
+        <button class="filter-chip sl">Category<span class="icon" aria-hidden="true">arrow_drop_down</span></button>
+        <button class="filter-chip filter-chip--plain sl" aria-pressed="false">Mine</button>
+        <button class="filter-chip filter-chip--plain sl" aria-pressed="false">Unassigned</button>
+        <button class="btn btn--text btn--sm sl filters__sort"><span class="icon" aria-hidden="true">sort</span>SLA risk</button>
+      </div>
+      <div class="qt">
+        <table role="grid" aria-label="Tickets, sorted by SLA risk">
+          <thead>
+            <tr>
+              <th class="c-sla" scope="col">SLA</th>
+              <th class="c-id" scope="col">ID</th>
+              <th class="c-subj" scope="col">Subject</th>
+              <th class="c-pri" scope="col">Priority</th>
+              <th class="c-status" scope="col">Status</th>
+              <th class="c-assignee" scope="col">Assignee</th>
+              <th class="c-req" scope="col">Requester</th>
+              <th class="c-upd" scope="col">Updated</th>
+            </tr>
+          </thead>
+          <tbody id="q-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Thread pane -->
+    <section class="pane pane--thread" aria-labelledby="th-title">
+      <div class="th-head">
+        <div class="th-head__row">
+          <button class="icon-btn sl only-compact-agent" data-back aria-label="Back to queue"><span class="icon" aria-hidden="true">arrow_back</span></button>
+          <div>
+            <span class="th-id">TCK-01040</span>
+            <h2 class="th-title" id="th-title">SSO sign-in loops back to the login page</h2>
+          </div>
+          <div class="th-actions">
+            <button class="icon-btn sl" aria-label="Open in its own page"><span class="icon" aria-hidden="true">open_in_full</span></button>
+            <button class="icon-btn sl" data-close aria-label="Close ticket and show the full queue"><span class="icon" aria-hidden="true">close</span></button>
+          </div>
+        </div>
+        <div class="th-meta">
+          <span class="chip chip--sm"><span class="icon" aria-hidden="true">person</span>Leo Client</span>
+          <span class="chip chip--sm"><span class="icon" aria-hidden="true">key</span>Account &amp; login</span>
+          <span class="chip chip--sm"><span class="icon" aria-hidden="true">schedule</span>Opened 20h ago</span>
+        </div>
+      </div>
+
+      <div class="th-body">
+        <ol aria-label="Conversation">
+          <li class="msg">
+            <span class="avatar" aria-hidden="true">L</span>
+            <div class="msg__who"><span class="msg__name">Leo Client</span><span class="msg__role">Customer</span><span class="msg__time num">20h ago</span></div>
+            <p class="msg__body">Since we switched to single sign-on yesterday, about half of our team gets sent back to the sign-in page after authenticating in Okta. It keeps looping. The others sign in fine. Clearing cookies didn't help. We have 40 people who can't get in right now.</p>
+          </li>
+          <li class="msg">
+            <span class="avatar avatar--tonal" aria-hidden="true">T</span>
+            <div class="msg__who"><span class="msg__name">Tom Tier1</span><span class="msg__role">Reply</span><span class="msg__time num">17h ago</span></div>
+            <p class="msg__body">Hi Leo, sorry about the disruption. Could you tell me whether the people who can't get in were already signed in before the switch, or are they all new sessions?</p>
+          </li>
+          <li class="msg">
+            <span class="avatar" aria-hidden="true">L</span>
+            <div class="msg__who"><span class="msg__name">Leo Client</span><span class="msg__role">Customer</span><span class="msg__time num">7h ago</span></div>
+            <p class="msg__body">Looks like it's the people who were already signed in with a password before we turned SSO on. New people and anyone who logged out first are fine.</p>
+          </li>
+          <li class="msg msg--note" aria-label="Internal note, not visible to the customer">
+            <span class="avatar avatar--tonal" aria-hidden="true">T</span>
+            <div class="msg__who"><span class="note-label"><span class="icon" aria-hidden="true">lock</span>Internal note</span><span class="msg__name">Tom Tier1</span><span class="msg__time num">4h ago</span></div>
+            <p class="msg__body">Their Okta app's ACS URL still points at their old vanity domain, and old password sessions keep that domain in the cookie. Checking with Sasha before I ask them to change it, since it logs everyone out.</p>
+          </li>
+        </ol>
+
+      </div>
+
+      <form class="th-compose" onsubmit="return false">
+        <div class="segmented segmented--sm" role="group" aria-label="Message type">
+          <button type="button" class="sl" data-compose="reply" aria-pressed="true"><span class="icon check" aria-hidden="true">check</span>Reply to customer</button>
+          <button type="button" class="sl" data-compose="note" aria-pressed="false"><span class="icon check" aria-hidden="true">check</span>Internal note</button>
+        </div>
+        <div class="composer" id="ag-composer">
+          <label class="visually-hidden" for="ag-text">Message</label>
+          <textarea id="ag-text" placeholder="Reply to Leo. The customer sees this."></textarea>
+          <div class="composer__bar">
+            <button type="button" class="icon-btn sl" aria-label="Attach a file"><span class="icon" aria-hidden="true">attach_file</span></button>
+            <button class="btn btn--filled btn--sm sl" type="submit" id="ag-send"><span class="icon" aria-hidden="true">send</span>Send reply</button>
+          </div>
+        </div>
+      </form>
+      <div class="side-inline" data-side-inline></div>
+    </section>
+
+    <!-- Side panel: properties + AI triage -->
+    <aside class="pane pane--side" aria-label="Ticket properties" id="side">
+      <section class="side-sec" aria-labelledby="st-h">
+        <h3 class="side-h" id="st-h">Status</h3>
+        <div class="status-now"><span class="icon" aria-hidden="true">pending_actions</span>In progress</div>
+        <div class="moveto">
+          <p class="moveto__k" id="moveto-k">Move to</p>
+          <div class="moveto__opts" role="group" aria-labelledby="moveto-k">
+            <button class="btn btn--tonal btn--sm sl"><span class="icon" aria-hidden="true">hourglass_top</span>Pending</button>
+            <button class="btn btn--tonal btn--sm sl"><span class="icon" aria-hidden="true">check_circle</span>Resolved</button>
+          </div>
+        </div>
+        <div class="side-sla">
+          <span class="sla sla--risk" role="img" aria-label="At risk, 4 hours left on resolution">
+            <svg viewBox="0 0 18 18" aria-hidden="true"><circle class="track" cx="9" cy="9" r="7"/><circle class="arc" cx="9" cy="9" r="7" stroke-dasharray="7.3 44"/></svg>
+            <span class="sla__time">4h 00m</span><span class="sla__state">At risk</span>
+          </span>
+          <span>Resolution due in <span class="num">4h 00m</span>. First response met.</span>
+        </div>
+      </section>
+
+      <section class="side-sec stack" aria-label="Assignment">
+        <div class="field"><span class="field__k">Assignee</span><button class="select sl"><span class="who"><span class="avatar avatar--sm avatar--tonal" aria-hidden="true">T</span><span>Tom Tier1</span></span><span class="icon" aria-hidden="true">arrow_drop_down</span></button></div>
+        <div class="field"><span class="field__k">Priority</span><button class="select sl"><span>Normal</span><span class="icon" aria-hidden="true">arrow_drop_down</span></button></div>
+        <div class="field"><span class="field__k">Category</span><button class="select sl"><span>Account &amp; login</span><span class="icon" aria-hidden="true">arrow_drop_down</span></button></div>
+        <button class="btn btn--outlined btn--sm sl" style="justify-self: start; margin-top: 4px"><span class="icon" aria-hidden="true">keyboard_double_arrow_up</span>Escalate to senior</button>
+      </section>
+
+      <section class="side-sec" aria-labelledby="ai-h">
+        <h3 class="side-h" id="ai-h">AI triage<button class="btn btn--text btn--sm sl"><span class="icon" aria-hidden="true">refresh</span>Re-run</button></h3>
+        <div class="ai">
+          <div class="ai__row">
+            <div class="ai__k"><span>Category<span class="ai__state"><span class="icon" aria-hidden="true">edit</span>Overridden</span></span><button class="btn btn--text btn--sm sl">Accept</button></div>
+            <p class="ai__v">Suggested <s>Technical issue</s>, set to Account &amp; login</p>
+          </div>
+          <div class="ai__row">
+            <div class="ai__k"><span>Priority<span class="ai__state ai__state--ok"><span class="icon" aria-hidden="true">check</span>Accepted</span></span><button class="btn btn--text btn--sm sl">Override</button></div>
+            <p class="ai__v">Normal</p>
+          </div>
+          <div class="ai__row">
+            <div class="ai__k"><span>Summary<span class="ai__state ai__state--ok"><span class="icon" aria-hidden="true">check</span>Accepted</span></span><button class="btn btn--text btn--sm sl">Override</button></div>
+            <p class="ai__v">After SSO rollout, half the team loops between Okta and the sign-in page.</p>
+          </div>
+          <div class="ai__row">
+            <div class="ai__k"><span>Suggested reply</span><button class="btn btn--tonal btn--sm sl" id="use-draft" style="margin-inline-end: 0"><span class="icon" aria-hidden="true">edit_note</span>Use draft</button></div>
+            <p class="ai__v ai__draft">Hi Leo, thanks for the detail on who's affected. A sign-in loop right after an SSO rollout usually means the reply URL in your identity provider doesn't match the one we expect. Could you check the Assertion Consumer Service URL in your Okta app settings…</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="side-sec">
+        <details class="audit">
+          <summary>History<span class="icon" aria-hidden="true">expand_more</span></summary>
+          <ol>
+            <li><span><b>Tom Tier1</b> added an internal note</span><span class="num">4h</span></li>
+            <li><span><b>Tom Tier1</b> changed status to In progress</span><span class="num">17h</span></li>
+            <li><span><b>Tom Tier1</b> changed category to Account &amp; login</span><span class="num">17h</span></li>
+            <li><span><b>Tom Tier1</b> changed status to Open</span><span class="num">18h</span></li>
+            <li><span><b>System</b> applied AI triage</span><span class="num">20h</span></li>
+          </ol>
+        </details>
+      </section>
+    </aside>
+
+    <nav class="navbar" aria-label="Main">
+      <a href="#agent" aria-current="page"><span class="rail__ind"><span class="icon icon--fill" aria-hidden="true">inbox</span></span>Queue</a>
+      <a href="#agent"><span class="rail__ind"><span class="icon" aria-hidden="true">monitoring</span></span>Dashboard</a>
+    </nav>
+  </div>
+</div>
+
+<script>
+/* ---------- Data (content from docs/demo-data/tickets.json) ---------- */
+const C = 43.98; // ring circumference, r = 7
+const QUEUE = [
+  { id: 'TCK-01038', subj: 'Pages take 20+ seconds to load from our office', one: 'Very slow page loads only on the office VPN; fine on home networks.', pri: 'Normal', status: 'In progress', sla: 'breached', time: '2h 00m', clock: 'resolution', asg: 'Tara Tier1', req: 'Uma User', upd: '12h' },
+  { id: 'TCK-01043', subj: 'Charged for 14 seats but we only have 6 people', one: 'Invoice bills 14 seats for a 6-person workspace; payment already taken.', pri: 'Urgent', esc: true, status: 'In progress', sla: 'breached', time: '1h 20m', clock: 'resolution', asg: 'Sasha Senior', req: 'Leo Client', upd: '1h' },
+  { id: 'TCK-01046', subj: 'Export to CSV times out on large reports', one: 'CSV export of an ~80k-row report fails after about a minute.', pri: 'Normal', status: 'Triaged', sla: 'risk', time: '40m', frac: 0.17, clock: 'first response', asg: null, req: 'Leo Client', upd: '3h' },
+  { id: 'TCK-01040', subj: 'SSO sign-in loops back to the login page', one: 'After SSO rollout, half the team loops between Okta and the sign-in page.', pri: 'Normal', status: 'In progress', sla: 'risk', time: '4h 00m', frac: 0.17, clock: 'resolution', asg: 'Tom Tier1', req: 'Leo Client', upd: '4h', selected: true },
+  { id: 'TCK-01034', subj: 'Is there a dark mode for the mobile app?', one: 'Team asking whether the mobile app has or will get a dark mode.', pri: 'Low', status: 'Open', sla: 'risk', time: '13h 40m', frac: 0.19, clock: 'resolution', asg: 'Tom Tier1', req: 'Leo Client', upd: '2d' },
+  { id: 'TCK-01051', subj: 'Dashboard shows an error screen for everyone', one: 'Dashboard fails for the whole workspace with reference DB-7F3A-19.', pri: 'Urgent', status: 'Open', sla: 'ok', time: '3h 20m', frac: 0.83, clock: 'resolution', asg: 'Tara Tier1', req: 'Leo Client', upd: '33m' },
+  { id: 'TCK-01052', subj: 'Payment failed and our workspace is restricted', one: "Workspace restricted after a failed payment; can't update card in read-only mode.", pri: 'High', status: 'Triaged', sla: 'ok', time: '40m', frac: 0.67, clock: 'first response', asg: null, req: 'Leo Client', upd: '20m' },
+  { id: 'TCK-01047', subj: 'I think someone else signed in to my account', one: 'Unrecognised sign-in from Lagos; customer wants to know what was accessed.', pri: 'High', esc: true, status: 'In progress', sla: 'ok', time: '5h 00m', frac: 0.63, clock: 'resolution', asg: 'Sasha Senior', req: 'Uma User', upd: '1h' },
+  { id: 'TCK-01048', subj: 'Requesting a full export of my data', one: 'Customer requests a full export of their personal data.', pri: 'High', status: 'Open', sla: 'ok', time: '6h 00m', frac: 0.75, clock: 'resolution', asg: 'Tom Tier1', req: 'Uma User', upd: '1h' },
+  { id: 'TCK-01054', subj: 'Charged twice this month', one: 'Waiting for AI triage', pri: 'Normal', status: 'New', sla: 'ok', time: '3h 54m', frac: 0.98, clock: 'first response', asg: null, req: 'Uma User', upd: '6m' },
+  { id: 'TCK-01042', subj: 'VAT missing from my invoice after I moved', one: 'Invoice after a move to the Netherlands has no VAT line; needs reissue.', pri: 'Normal', status: 'In progress', sla: 'ok', time: '17h 00m', frac: 0.71, clock: 'resolution', asg: 'Tom Tier1', req: 'Uma User', upd: '3h' },
+  { id: 'TCK-01045', subj: 'Two-factor codes rejected on my new phone', one: 'Authenticator codes rejected after moving the app to a new phone.', pri: 'High', status: 'Pending', sla: 'paused', asg: 'Tom Tier1', req: 'Uma User', upd: '3h' },
+  { id: 'TCK-01039', subj: 'Report builder crashes when I add a date filter', one: 'Report builder errors when a created-date filter is added (RB-5521-A).', pri: 'Normal', status: 'Pending', sla: 'paused', asg: 'Tara Tier1', req: 'Leo Client', upd: '5h' },
+  { id: 'TCK-01036', subj: 'Invoice PDF downloads as a blank page', one: 'Latest invoice PDF renders blank; older invoices download correctly.', pri: 'Normal', status: 'Resolved', sla: 'none', asg: 'Tara Tier1', req: 'Uma User', upd: '1d' },
+];
+
+// Uma's requests, "Waiting on you" first, then most recently updated.
+const REQUESTS = [
+  { subj: 'Two-factor codes rejected on my new phone', chip: 'Waiting on you', attention: true, line: 'Tom asked you to confirm the last four digits of the card on your account', upd: '3h ago' },
+  { subj: 'Can I rename my workspace?', chip: 'Received', line: "We're reviewing this", upd: '3m ago' },
+  { subj: 'Charged twice this month', chip: 'Received', line: "We're reviewing this", upd: '6m ago' },
+  { subj: 'I think someone else signed in to my account', chip: 'In progress', line: 'Sasha is reviewing the sign-in with our security team', upd: '1h ago' },
+  { subj: 'Please delete my old test account', chip: 'Received', line: "We're reviewing this", upd: '2h ago' },
+  { subj: 'Requesting a full export of my data', chip: 'Open', line: "Tom has started your export and will send the link here", upd: '2h ago' },
+  { subj: 'VAT missing from my invoice after I moved', chip: 'In progress', line: 'Tom is reissuing your invoice with Dutch VAT', upd: '3h ago' },
+  { subj: 'Password reset email never arrives', chip: 'Open', line: 'Tara cleared the reset limit. Try requesting a new link', upd: '4h ago' },
+  { subj: 'Pages take 20+ seconds to load from our office', chip: 'In progress', line: 'Tara is checking how your office VPN reaches us', upd: '15h ago' },
+  { subj: 'Invoice PDF downloads as a blank page', chip: 'Resolved', icon: 'check_circle', line: 'Reply within 72h to reopen', upd: 'Yesterday', href: '#ticket' },
+  { subj: 'Email notifications stopped arriving', chip: 'Closed', line: 'Replying starts a new request', upd: '6 days ago' },
+];
+
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const initials = (n) => n.split(' ')[0][0];
+
+function slaHtml(t) {
+  const label = {
+    ok: `On track, ${t.time} left on ${t.clock}`,
+    risk: `At risk, ${t.time} left on ${t.clock}`,
+    breached: `Breached, ${t.time} over on ${t.clock}`,
+    paused: 'Paused while waiting on the customer',
+    none: 'Stopped, ticket resolved',
+  }[t.sla];
+  const frac = t.sla === 'breached' ? 1 : t.frac ?? 0;
+  const arc = ['ok', 'risk', 'breached'].includes(t.sla)
+    ? `<circle class="arc" cx="9" cy="9" r="7" stroke-dasharray="${(frac * C).toFixed(1)} ${C}"/>` : '';
+  const time = t.time ? `<span class="sla__time">${t.time}</span>` : '';
+  const word = { risk: 'At risk', breached: 'Breached', paused: 'Paused', none: 'Stopped' }[t.sla] ?? '';
+  return `<span class="sla sla--${t.sla}" role="img" aria-label="${label}"><svg viewBox="0 0 18 18" aria-hidden="true"><circle class="track" cx="9" cy="9" r="7"/>${arc}</svg>${time}${word ? `<span class="sla__state">${word}</span>` : ''}</span>`;
+}
+const PRI_ICON = { Urgent: 'priority_high', High: 'keyboard_arrow_up', Normal: 'drag_handle', Low: 'keyboard_arrow_down' };
+
+document.getElementById('q-body').innerHTML = QUEUE.map((t) => `
+  <tr tabindex="${t.selected ? 0 : -1}" aria-selected="${!!t.selected}" data-id="${t.id}">
+    <td class="c-sla">${slaHtml(t)}</td>
+    <td class="c-id">${t.id}</td>
+    <td class="c-subj">${t.pri === 'Urgent' || t.pri === 'High' ? `<span class="icon subj-pri subj-pri--${t.pri.toLowerCase()}" role="img" aria-label="${t.pri} priority">${PRI_ICON[t.pri]}</span>` : ''}<span class="subj">${esc(t.subj)}</span>${t.esc ? '<span class="icon esc" aria-label="Escalated" title="Escalated" role="img">keyboard_double_arrow_up</span>' : ''}<span class="oneliner">${esc(t.one)}</span></td>
+    <td class="c-pri"><span class="pri pri--${t.pri.toLowerCase()}"><span class="icon" aria-hidden="true">${PRI_ICON[t.pri]}</span>${t.pri}</span></td>
+    <td class="c-status">${t.status}</td>
+    <td class="c-assignee">${t.asg ? `<span class="who"><span class="avatar avatar--sm ${t.asg.startsWith('Sasha') ? 'avatar--senior' : 'avatar--tonal'}" aria-hidden="true">${initials(t.asg)}</span><span>${t.asg.split(' ')[0]}</span></span>` : '<span class="muted">Unassigned</span>'}</td>
+    <td class="c-req">${t.req}</td>
+    <td class="c-upd">${t.upd}</td>
+  </tr>`).join('');
+document.getElementById('q-count').textContent = QUEUE.length;
+
+document.getElementById('req-list').innerHTML = REQUESTS.map((r) => `
+  <li><a class="req sl ${r.attention ? 'req--attention' : ''}" href="${r.href ?? '#home'}">
+    <span class="req__title">${esc(r.subj)}</span>
+    <span class="req__line">${esc(r.line)}</span>
+    <span class="req__meta">
+      <span class="chip chip--sm ${r.attention ? 'chip--attention' : ''}">${r.attention ? '<span class="icon" aria-hidden="true">reply</span>' : r.icon ? `<span class="icon" aria-hidden="true">${r.icon}</span>` : ''}${r.chip}</span>
+      <span class="req__time">${r.upd}</span>
+    </span>
+  </a></li>`).join('');
+
+/* ---------- Screens (hash routing) ---------- */
+if (document.documentElement.classList.contains('bare-root')) document.body.classList.add('bare');
+const ag = document.getElementById('ag');
+function route() {
+  const h = location.hash.replace('#', '') || 'home';
+  const screen = h.startsWith('agent') ? 'agent' : h.startsWith('ticket') ? 'ticket' : 'home';
+  document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('is-active', s.id === `screen-${screen}`));
+  document.querySelectorAll('.mockbar a').forEach((a) => { if (a.getAttribute('href') !== `#${screen}`) a.removeAttribute('aria-current'); else a.setAttribute('aria-current', 'page'); });
+  ag.classList.toggle('is-detail', h === 'agent/detail');
+  ag.classList.toggle('is-list-only', h === 'agent/list');
+  document.title = { home: 'Help: home', ticket: 'Help: request', agent: 'Support console: queue' }[screen] + ' (mockup)';
+}
+addEventListener('hashchange', route);
+route();
+
+/* ---------- Theme: system / light / dark ---------- */
+const MODES = ['system', 'light', 'dark'];
+const MODE_ICON = { system: 'brightness_auto', light: 'light_mode', dark: 'dark_mode' };
+function applyTheme(mode) {
+  if (mode === 'system') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = mode;
+  try { localStorage.setItem('theme', mode); } catch {}
+  document.querySelectorAll('[data-theme-set]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.themeSet === mode));
+  document.querySelectorAll('[data-theme-cycle]').forEach((b) => {
+    const i = b.querySelector('.icon'); if (i) i.textContent = MODE_ICON[mode];
+    if (b.tagName === 'BUTTON') b.setAttribute('aria-label', `Theme: ${mode}. Change theme`);
+  });
+  document.querySelectorAll('[data-theme-label]').forEach((l) => (l.textContent = mode[0].toUpperCase() + mode.slice(1)));
+}
+const current = () => document.documentElement.dataset.theme ?? 'system';
+document.querySelectorAll('[data-theme-set]').forEach((b) => b.addEventListener('click', () => applyTheme(b.dataset.themeSet)));
+document.querySelectorAll('[data-theme-cycle]').forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); applyTheme(MODES[(MODES.indexOf(current()) + 1) % 3]); }));
+applyTheme(current());
+
+/* ---------- End-user: search reveals the answer (the one orchestrated moment) ---------- */
+const answer = document.getElementById('answer');
+document.getElementById('kb-search').addEventListener('submit', (e) => {
+  e.preventDefault();
+  answer.classList.add('is-loading');
+  setTimeout(() => answer.classList.remove('is-loading'), 700);
+});
+document.getElementById('kb-clear').addEventListener('click', () => { const q = document.getElementById('kb-q'); q.value = ''; q.focus(); });
+document.querySelectorAll('.cite').forEach((c) => c.addEventListener('click', (e) => {
+  e.preventDefault();
+  const s = document.querySelector(c.getAttribute('href'));
+  s.focus(); s.classList.add('is-flash'); setTimeout(() => s.classList.remove('is-flash'), 1200);
+}));
+
+/* ---------- Agent: queue selection (click, j/k, Enter) ---------- */
+const rows = [...document.querySelectorAll('#q-body tr')];
+function select(row, open) {
+  rows.forEach((r) => { r.setAttribute('aria-selected', r === row); r.tabIndex = r === row ? 0 : -1; });
+  row.focus({ preventScroll: false });
+  if (open && matchMedia('(max-width: 839px)').matches) location.hash = 'agent/detail';
+  if (open && ag.classList.contains('is-list-only')) location.hash = 'agent';
+}
+rows.forEach((r) => r.addEventListener('click', () => select(r, true)));
+document.addEventListener('keydown', (e) => {
+  if (!document.getElementById('screen-agent').classList.contains('is-active')) return;
+  if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+  const i = rows.findIndex((r) => r.getAttribute('aria-selected') === 'true');
+  if (e.key === 'j') select(rows[Math.min(i + 1, rows.length - 1)]);
+  if (e.key === 'k') select(rows[Math.max(i - 1, 0)]);
+  if (e.key === 'Enter' && document.activeElement.closest('#q-body')) select(rows[i], true);
+});
+document.querySelector('[data-back]').addEventListener('click', () => (location.hash = 'agent'));
+document.querySelector('[data-close]').addEventListener('click', () => (location.hash = 'agent/list'));
+
+/* Composer: Reply / Internal note toggle, and "Use draft" */
+const composer = document.getElementById('ag-composer');
+const text = document.getElementById('ag-text');
+const send = document.getElementById('ag-send');
+document.querySelectorAll('[data-compose]').forEach((b) => b.addEventListener('click', () => {
+  const note = b.dataset.compose === 'note';
+  document.querySelectorAll('[data-compose]').forEach((x) => x.setAttribute('aria-pressed', x === b));
+  composer.classList.toggle('is-note', note);
+  text.placeholder = note ? 'Internal note. Only agents see this.' : 'Reply to Leo. The customer sees this.';
+  send.lastChild.textContent = note ? 'Add note' : 'Send reply';
+}));
+document.getElementById('use-draft').addEventListener('click', () => {
+  document.querySelector('[data-compose="reply"]').click();
+  text.value = "Hi Leo, thanks for the detail on who's affected. A sign-in loop right after an SSO rollout usually means the reply URL in your identity provider doesn't match the one we expect. Could you check the Assertion Consumer Service URL in your Okta app settings and confirm it's set to https://app.ticketing.demo/sso/acs? If it still points at your old domain, updating it should fix the loop for everyone.";
+  text.focus();
+});
+
+/* Below 1200px the side panel moves under the thread (one DOM, two homes). */
+const side = document.getElementById('side');
+const inlineHome = document.querySelector('[data-side-inline]');
+const mqSide = matchMedia('(max-width: 1199px)');
+function placeSide() {
+  if (mqSide.matches) { inlineHome.append(...side.children); }
+  else if (inlineHome.children.length) { side.append(...inlineHome.children); }
+}
+mqSide.addEventListener('change', placeSide);
+placeSide();
+
+// Latest message sits next to the composer, as in any thread.
+const thBody = document.querySelector('.th-body');
+if (!mqSide.matches) thBody.scrollTop = thBody.scrollHeight;
+</script>
+</body>
+</html>
