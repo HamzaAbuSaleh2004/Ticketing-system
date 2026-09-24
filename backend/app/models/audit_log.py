@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -9,6 +9,11 @@ from app.db import Base
 
 class AuditLog(Base):
     __tablename__ = "audit_log"
+    __table_args__ = (
+        # Phase 3 follow-up: the audit trail is always looked up by
+        # (entity_type, entity_id) — e.g. a ticket's audit trail.
+        Index("ix_audit_log_entity_type_entity_id", "entity_type", "entity_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)

@@ -17,6 +17,7 @@ dependencies = [
     "httpx>=0.28",
     "python-multipart>=0.0.17",
     "pgvector>=0.3",
+    "email-validator>=2.2",
 ]
 
 [dependency-groups]
@@ -32,3 +33,21 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+[tool.ruff.lint]
+ignore = [
+    # Shebang-missing fires repo-wide on Windows, which doesn't track the
+    # executable bit; git's core.fileMode is also set to false for this repo.
+    "EXE002",
+    # FastAPI's `Depends(...)` default-argument pattern is idiomatic, not a
+    # mutable-default bug; every router/dependency in this app uses it.
+    "B008",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# A single event loop for the whole session: app.db builds one global async
+# engine at import time, and asyncpg connections can't be reused across
+# event loops, so per-test loops would break the pooled connection.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"

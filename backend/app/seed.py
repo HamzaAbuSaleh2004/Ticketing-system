@@ -23,12 +23,12 @@ logger = logging.getLogger(__name__)
 SEED_PASSWORD = "ChangeMe123!"
 
 USERS = [
-    {"email": "admin@ticketing.local", "name": "Ada Admin", "role": UserRole.admin, "team": None},
-    {"email": "agent1@ticketing.local", "name": "Tara Tier1", "role": UserRole.agent, "team": Team.tier1},
-    {"email": "agent2@ticketing.local", "name": "Tom Tier1", "role": UserRole.agent, "team": Team.tier1},
-    {"email": "agent3@ticketing.local", "name": "Sasha Senior", "role": UserRole.agent, "team": Team.senior},
-    {"email": "user1@ticketing.local", "name": "Uma User", "role": UserRole.end_user, "team": None},
-    {"email": "user2@ticketing.local", "name": "Leo Client", "role": UserRole.end_user, "team": None},
+    {"email": "admin@ticketing.demo", "name": "Ada Admin", "role": UserRole.admin, "team": None},
+    {"email": "agent1@ticketing.demo", "name": "Tara Tier1", "role": UserRole.agent, "team": Team.tier1},
+    {"email": "agent2@ticketing.demo", "name": "Tom Tier1", "role": UserRole.agent, "team": Team.tier1},
+    {"email": "agent3@ticketing.demo", "name": "Sasha Senior", "role": UserRole.agent, "team": Team.senior},
+    {"email": "user1@ticketing.demo", "name": "Uma User", "role": UserRole.end_user, "team": None},
+    {"email": "user2@ticketing.demo", "name": "Leo Client", "role": UserRole.end_user, "team": None},
 ]
 
 SLA_POLICIES = [
@@ -177,18 +177,33 @@ async def seed_kb_articles(session: AsyncSession) -> None:
         existing = await session.scalar(
             select(KnowledgeBaseArticle).where(KnowledgeBaseArticle.slug == a["slug"])
         )
-        if existing:
-            continue
-        [embedding] = await provider.embed([a["body"]])
-        session.add(
-            KnowledgeBaseArticle(
-                slug=a["slug"],
-                title=a["title"],
-                body=a["body"],
-                tags=a["tags"],
-                embedding=embedding,
+        # Embed title + body (not body alone) so a query matching only the
+        # title still ranks the article well.
+        embed_text = f"{a['title']}\n\n{a['body']}"
+
+        if existing is None:
+            [embedding] = await provider.embed([embed_text])
+            session.add(
+                KnowledgeBaseArticle(
+                    slug=a["slug"],
+                    title=a["title"],
+                    body=a["body"],
+                    tags=a["tags"],
+                    embedding=embedding,
+                    embedding_model=provider.EMBEDDING_MODEL_ID,
+                )
             )
-        )
+            continue
+
+        # Re-embed whenever the stored vector came from a different model
+        # (e.g. fake-mode vectors once GEMINI_API_KEY is added) — otherwise
+        # query vectors from the new model get compared against stale ones
+        # and search returns noise.
+        if existing.embedding_model != provider.EMBEDDING_MODEL_ID:
+            [embedding] = await provider.embed([embed_text])
+            existing.embedding = embedding
+            existing.embedding_model = provider.EMBEDDING_MODEL_ID
+
     await session.commit()
 
 

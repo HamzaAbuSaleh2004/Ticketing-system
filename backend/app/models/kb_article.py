@@ -21,6 +21,10 @@ class KnowledgeBaseArticle(Base):
     tags: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     # §2 addition: real vector(768) column, populated at seed time by the AIProvider.
     embedding: Mapped[list[float] | None] = mapped_column(Vector(_settings.EMBED_DIM), nullable=True)
+    # Phase 3 follow-up: which model produced `embedding` (e.g. "fake-hash-v1"
+    # vs "gemini-embedding-001"), so seed.py can re-embed articles when the
+    # provider changes instead of comparing stale and current vectors.
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

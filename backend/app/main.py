@@ -8,6 +8,7 @@ from app import models  # noqa: F401 -- registers models on Base.metadata
 from app.config import get_settings
 from app.db import engine
 from app.redis_client import get_redis
+from app.routers.auth import router as auth_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,6 +24,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth_router)
 
 
 @app.get("/health")

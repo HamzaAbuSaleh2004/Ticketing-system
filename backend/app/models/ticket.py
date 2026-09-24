@@ -20,10 +20,10 @@ class Ticket(Base):
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[TicketStatus] = mapped_column(
-        ticket_status_enum, nullable=False, default=TicketStatus.new
+        ticket_status_enum, nullable=False, default=TicketStatus.new, index=True
     )
     priority: Mapped[TicketPriority] = mapped_column(
-        ticket_priority_enum, nullable=False, default=TicketPriority.normal
+        ticket_priority_enum, nullable=False, default=TicketPriority.normal, index=True
     )
     category: Mapped[str | None] = mapped_column(
         ForeignKey("categories.slug"), nullable=True, index=True

@@ -32,6 +32,16 @@ AI). Copy `.env.example` to `.env` and set `GEMINI_API_KEY` to use real Gemini i
   docker compose up -d --build --renew-anon-volumes frontend
   ```
 
+## Running the backend tests
+
+```
+docker compose exec api pytest
+```
+
+Tests run against a real Postgres database (`ticketing_test`, created automatically on the
+same `db` service — not mocked or SQLite), migrated with `alembic upgrade head`. Tables are
+truncated after every test for isolation, so re-running is always safe.
+
 ## Seeded accounts
 
 Created by `backend/app/seed.py` (idempotent — safe to re-run). All accounts share the
@@ -39,9 +49,9 @@ password below; change it before this ever leaves a local dev environment.
 
 | Email | Role | Team | Password |
 |---|---|---|---|
-| admin@ticketing.local | admin | — | `ChangeMe123!` |
-| agent1@ticketing.local | agent | tier1 | `ChangeMe123!` |
-| agent2@ticketing.local | agent | tier1 | `ChangeMe123!` |
-| agent3@ticketing.local | agent | senior | `ChangeMe123!` |
-| user1@ticketing.local | end_user | — | `ChangeMe123!` |
-| user2@ticketing.local | end_user | — | `ChangeMe123!` |
+| admin@ticketing.demo | admin | — | `ChangeMe123!` |
+| agent1@ticketing.demo | agent | tier1 | `ChangeMe123!` |
+| agent2@ticketing.demo | agent | tier1 | `ChangeMe123!` |
+| agent3@ticketing.demo | agent | senior | `ChangeMe123!` |
+| user1@ticketing.demo | end_user | — | `ChangeMe123!` |
+| user2@ticketing.demo | end_user | — | `ChangeMe123!` |
