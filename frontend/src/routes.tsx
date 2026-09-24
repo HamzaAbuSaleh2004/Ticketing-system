@@ -4,7 +4,9 @@ import { LoginPage } from "./auth/LoginPage";
 import { RegisterPage } from "./auth/RegisterPage";
 import { RoleGate } from "./auth/RoleGate";
 import { TokensPage } from "./dev/TokensPage";
+import { AdminPage } from "./portals/admin/AdminPage";
 import { AgentShell } from "./portals/agent/AgentShell";
+import { DashboardPage } from "./portals/agent/dashboard/DashboardPage";
 import { AgentTicketPage } from "./portals/agent/AgentTicketPage";
 import { QueuePage } from "./portals/agent/QueuePage";
 import { ArticlePage } from "./portals/enduser/ArticlePage";
@@ -13,14 +15,6 @@ import { HomePage } from "./portals/enduser/HomePage";
 import { NewRequestPage } from "./portals/enduser/NewRequestPage";
 import { RequestPage } from "./portals/enduser/RequestPage";
 import { sys } from "./theme/scheme";
-
-function Placeholder({ title }: { title: string }) {
-  return (
-    <Box sx={{ py: 4, px: { xs: 2, sm: 3 } }}>
-      <Typography variant="headlineMedium">{title}</Typography>
-    </Box>
-  );
-}
 
 // Keyed by id: moving to another request (a follow-up, a linked parent)
 // starts fresh triage polling and shows that request's own toast.
@@ -73,14 +67,14 @@ const routes: RouteObject[] = [
     children: [
       { path: "/agent", element: <QueuePage /> },
       { path: "/agent/tickets/:id", element: <AgentTicketRoute /> },
-      { path: "/agent/dashboard", element: <Placeholder title="Dashboard" /> },
+      { path: "/agent/dashboard", element: <DashboardPage /> },
       {
         element: (
           <RoleGate roles={["admin"]}>
             <Outlet />
           </RoleGate>
         ),
-        children: [{ path: "/admin", element: <Placeholder title="Admin" /> }],
+        children: [{ path: "/admin", element: <AdminPage /> }],
       },
     ],
   },

@@ -19,6 +19,8 @@ export const PRIORITY_LABEL: Record<TicketPriority, string> = {
   urgent: "Urgent",
 };
 
+export const PRIORITY_SHORT: Record<TicketPriority, string> = { urgent: "Urgent", high: "High", normal: "Normal", low: "Low" };
+
 /** The end-user portal speaks in what's happening, not in workflow states. */
 export const CUSTOMER_STATUS: Record<TicketStatus, { label: string; line: string }> = {
   new: { label: "Received", line: "We're reviewing this" },

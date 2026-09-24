@@ -443,10 +443,66 @@ Each phase ends with **Verify**: commands the executor must actually run, with t
     - Duplicated category-name and ticket-ref helpers.
 
 ### Phase 9 — Analytics dashboard + Admin
-- [ ] `GET /analytics/summary?from&to`: ticket volume per day, median/avg first-response time, median/avg resolution time (excluding paused time), backlog by status, SLA breach count. SQL aggregates, not Python loops.
-- [ ] Dashboard: 4 stat tiles plus 2 charts (volume over time; backlog by status). **Load the `dataviz` skill** before building charts. Chart colors come from the M3 scheme roles.
-- [ ] Admin (minimal): users table with role/team edit, a category list (add/deactivate), and an SLA policy editor (edit minutes per priority; applies to new tickets only, which is stated in the UI). All changes are audit-logged.
+- [x] `GET /analytics/summary?from&to`: ticket volume per day, median/avg first-response time, median/avg resolution time (excluding paused time), backlog by status, SLA breach count. SQL aggregates, not Python loops.
+- [x] Dashboard: 4 stat tiles plus 2 charts (volume over time; backlog by status). **Load the `dataviz` skill** before building charts. Chart colors come from the M3 scheme roles.
+- [x] Admin (minimal): users table with role/team edit, a category list (add/deactivate), and an SLA policy editor (edit minutes per priority; applies to new tickets only, which is stated in the UI). All changes are audit-logged.
 - **Verify:** pytest for the analytics math on a fixed dataset; screenshot the dashboard and critique.
+
+  **Evidence (2026-09-24):**
+  - `GET /analytics/summary?from&to` (`backend/app/routers/analytics.py`, agents and admins only): every figure is a SQL aggregate.
+    - Per-day volume uses `generate_series` over dates with UTC-explicit bounds, so buckets don't depend on the DB session `TimeZone`.
+    - First response and resolution use `percentile_cont(0.5)` and `avg`; resolution subtracts `sla_paused_total_seconds`.
+    - Backlog is the current active statuses, zero-filled.
+    - SLA breaches are counted with `count(*) FILTER`. A paused ticket counts only if it paused after its due date.
+    - Defaults to the last 30 UTC days (from the injectable clock); a 366-day cap; 422 if from > to.
+  - Admin endpoints (`backend/app/routers/admin.py`, every write goes through `write_audit`):
+    - `GET/PATCH /users`: role/team edits; team is cleared for non-agents; no self role change; can't demote someone still holding open tickets; an explicit null is ignored.
+    - `POST/PATCH /categories`: slugged, 409 on duplicates, names validated after trimming, the slug stays fixed on rename.
+    - `GET/PATCH /sla-policies/{priority}`: 1 min to 90 days, first reply ≤ resolution.
+    - `GET /admin/audit`: a change feed with actor and subject names.
+  - `pytest` → **138 passed**. `tests/test_analytics_admin.py` checks against a hand-computed dataset with a frozen clock:
+    - volume `[2, 1, 2]`
+    - first response median 900s / average 1425s over 4 tickets
+    - resolution median/average 48600s over 2 tickets, with a 1h pause excluded
+    - backlog `{new 1, triaged 0, open 1, in_progress 1, pending 1}`
+    - breaches `{total 3, response 2, resolution 3}`, including a paused-before-due ticket correctly not counted
+    - the default 30-day window, 422 and 403
+
+    It also covers the admin rules, audit rows with before/after, and that new tickets pick up an edited policy while existing ones keep their dates. ruff is clean.
+  - `dataviz` loaded before any chart code. Dashboard (`frontend/src/portals/agent/dashboard/`):
+    - A 7/30/90-day segmented range (`?days=`) in one row above everything.
+    - Four stat tiles: tickets created, median first response, median resolution (paused time excluded), SLA breaches split into first-reply and resolution.
+    - A daily column chart and a backlog bar chart. Both are single-series in `primary`, with ≤ 24px bars, 4px rounded data ends, a hairline grid, a value-first tooltip on hover and arrow keys, a crosshair, and a "Show as table" twin. The previous render is held (dimmed) while refetching.
+    - Validator: `primary` passes mark contrast on both chart surfaces in both modes. The seed tone was rejected for dark mode (2.9:1).
+  - Admin (`frontend/src/portals/admin/AdminPage.tsx`, URL tabs):
+    - Users: role and team selects; own role locked.
+    - Categories: add, plus an active switch.
+    - SLA policies: minute fields with hour hints and per-row Save, under the stated rule "Changes apply to tickets created after you save. Existing tickets keep their due dates unless their priority changes."
+    - Change log: rows such as who, "User Tom Tier1", "Team Tier 1 to Senior" in separate cells.
+    - Loading and error states on every tab.
+  - `vitest` → **24 passed**, adding `niceTicks` (clean whole steps) and `describeChange`. Playwright `e2e/phase9-dashboard-admin.spec.ts` → **2 passed**:
+    - tiles match the API's figures; hover and arrow-key tooltips; the table view has 30 rows plus a header; the range switch updates the URL
+    - an admin team change, an SLA edit, and a category add plus deactivate all appear in the change log
+    - the spec restores the seeded SLA values afterwards
+  - Full Playwright suite → **17 passed**.
+  - Screenshots in `docs/screenshots/phase-9/`: `dashboard-{1600,1280}`, `dashboard-hover-1600`, `dashboard-dark-1280`, `dashboard-dark-390`, `admin-{users,sla,categories,changes}-1280`.
+  - Critique fixes:
+    - The top y-tick label was clipped, so the plot has top padding.
+    - "<1m" hid real sub-minute response times, so the dashboard shows seconds.
+    - The SLA table mixed "Urgent" with "High priority", so it uses one short label map.
+    - Snackbars covered the rail's account button, so they're centred.
+    - "When" wrapped in the change log, so it's wider and doesn't wrap.
+  - **`material-3` audit: [docs/audits/phase-9-md3.md](docs/audits/phase-9-md3.md), 84/100, every category ≥ 7** (Motion 7, Components, Layout, Navigation and Accessibility 8), plus the dataviz checklist. axe WCAG 2.2 AA → **0 violations** on the dashboard (light and dark, table open) and admin Users/SLA, after fixing a non-focusable scrollable table region it found.
+  - Code review (`code-review` at high) found 9 issues, all fixed:
+    - An explicit null role caused a 500.
+    - Whitespace-only category names were accepted.
+    - The change log didn't say what changed.
+    - Demoting an agent orphaned their tickets.
+    - Every admin save invalidated the whole query cache.
+    - The analytics cache was keyed by preset rather than dates, so it went stale across UTC midnight.
+    - Volume buckets depended on the session time zone.
+    - Admin tabs had no loading/error states.
+    - The priority label map was duplicated.
 
 ### Phase 10 — Hardening & acceptance
 - [ ] README: one-command start, seeded credentials, how to add `GEMINI_API_KEY`, the fake vs gemini provider, and the stated seed/type/tone.

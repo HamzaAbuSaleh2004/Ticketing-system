@@ -1,6 +1,6 @@
 import { Box } from "@mui/material";
 import type { TicketPriority, TicketStatus } from "../api/types";
-import { STATUS_LABEL } from "../lib/tickets";
+import { PRIORITY_SHORT, STATUS_LABEL } from "../lib/tickets";
 import { sys, type ColorRole } from "../theme/scheme";
 import { typescale } from "../theme/tokens";
 
@@ -48,8 +48,6 @@ const PRIORITY_TONE: Record<TicketPriority, Tone> = {
   normal: { bg: null, fg: "onSurface", outline: true },
   low: { bg: null, fg: "onSurfaceVariant", outline: true },
 };
-
-const PRIORITY_SHORT: Record<TicketPriority, string> = { urgent: "Urgent", high: "High", normal: "Normal", low: "Low" };
 
 export function PriorityChip({ priority }: { priority: TicketPriority }) {
   return <Pill tone={PRIORITY_TONE[priority]}>{PRIORITY_SHORT[priority]}</Pill>;

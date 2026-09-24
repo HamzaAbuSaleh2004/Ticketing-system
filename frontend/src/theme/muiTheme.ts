@@ -259,6 +259,8 @@ export function buildMuiTheme(scheme: ColorScheme, isDark: boolean, density: Den
       MuiTableCell: { styleOverrides: { root: { borderColor: c.outlineVariant } } },
       MuiTab: { styleOverrides: { root: { textTransform: "none", ...m3Variants.titleSmall } } },
       MuiLink: { defaultProps: { underline: "hover" } },
+      // Centred, so it never covers the nav rail's account/appearance buttons.
+      MuiSnackbar: { defaultProps: { anchorOrigin: { vertical: "bottom", horizontal: "center" } } },
       MuiSnackbarContent: {
         styleOverrides: {
           root: {
