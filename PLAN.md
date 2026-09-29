@@ -2,10 +2,16 @@
 
 > Source of truth for requirements: [ticketing-portal-brief.md](ticketing-portal-brief.md).
 > This plan turns the brief into ordered phases for an executing agent (Sonnet).
-> Execute **one phase per session/turn**, run that phase's verification, tick its checkbox here, then stop.
+> Work through the phases in order as CLAUDE.md describes: run each phase's verification, tick its boxes here with evidence, commit, then continue.
 > Do not skip ahead, and do not add anything the brief lists as a non-goal.
 
 ---
+
+> **Scope changes from the user override the brief where they conflict (latest first):**
+> - **2026-09-29 (b):** Deploy to Google Cloud (Phases 16–17; the brief's "no GCP deployment" non-goal no longer applies). LiverX branding replaces the Spruce seed (Phase 14). All buttons share one colour. Tickets carry the customer's organisation (company or government entity) and two action lists, one for the customer and one for LiverX. The first real admin is `habusaleh@liverx.me`.
+> - **2026-09-29 (a):** No AI anywhere, manual triage, no Redis or pgvector, mandatory TOTP 2FA for every account (Phase 11).
+>
+> Rows of §0 that these replace: *AI*, *Models*, *Queue*, the pgvector part of *DB*, and the Spruce seed in *Design direction*. Everything else in §0 stands.
 
 ## 0. Decisions locked (do not re-litigate)
 
@@ -586,8 +592,93 @@ Each phase ends with **Verify**: commands the executor must actually run, with t
   - **Not yet run:** the `code-review` skill at high on this diff and a full `material-3` audit report for the new screens. They were deferred to hand the summary to the user; run them before Phase 12.
 
 
-### Phase 12 — Google Cloud deployment (not started; needs the user's go-ahead)
-Deploy only after the user has reviewed the Phase 11 summary. Cheapest database: **Cloud SQL for PostgreSQL 16, Enterprise edition, shared-core `db-f1-micro`, HDD storage, zonal, no HA**. Details and costs are in the Phase 11 hand-over note. Needed before deploy: attachments on Cloud Storage (Cloud Run disks are ephemeral), sweeps triggered by Cloud Scheduler instead of an always-on worker, the frontend served as a static build, secrets in Secret Manager, `ENV=prod` with the CORS origin from config.
+### Phase 12 — Tickets carry the organisation, the requester and two action lists
+**Follow-ups first (from Phase 11, which deferred them):**
+- [ ] Run `code-review` at `high` on the Phase 11 diff (`git diff 401c246..2756e78`) and fix confirmed findings, each with a test.
+- [ ] Write the `material-3` audit for the Phase 11 screens (two-step setup, verify, recovery codes, search results, request received, admin reset dialog) to `docs/audits/phase-11-md3.md`. Every category must score ≥ 7.
+
+**Why:** the user needs every ticket to show which organisation (a company or a government entity) has the problem, who opened it, and what is needed from the customer and from LiverX.
+
+**Data model.** One Alembic migration; the docstring lists each addition.
+- `organizations`: `id`, `name` (unique, trimmed, case-insensitive unique index on `lower(name)`), `kind` enum `company | government`, `active bool default true`, `created_at`.
+- `users.organization_id` FK → `organizations`, nullable. Only meaningful for `end_user` accounts; clear it when the role becomes agent or admin (same rule as `team`).
+- `tickets.organization_id` FK → `organizations`, nullable, indexed. Set at create from the requester's organisation. Agents can change it; the change is audited like category.
+- `ticket_action_items`: `id`, `ticket_id` FK (indexed), `side` enum `customer | liverx`, `description text` (1–500 chars, trimmed), `done bool`, `created_by` FK users, `created_at`, `done_at`, `done_by` FK users, nullable.
+- The "person who opened the ticket" is the existing `requester` (name + email). Show it everywhere, see below. Don't add a separate column.
+
+**API.**
+- [ ] `GET/POST/PATCH /organizations` (list: agents/admins; create/rename/kind/deactivate: admin only, audit-logged with `entity_type="organization"`, 409 on a duplicate name). `PATCH /users/{id}` accepts `organization_id` (admin only; 422 for an inactive organisation or a staff account).
+- [ ] Ticket responses gain `organization_id`, `organization_name`, `organization_kind`, and `action_items` (list), plus `open_customer_items` / `open_liverx_items` counts on list and queue rows. End users see their own ticket's organisation and all its action items (neither is internal).
+- [ ] `GET /tickets` filters: `organization` (id, or `none`), and sort by `organization`.
+- [ ] `POST /tickets/{id}/action-items {side, description}`: agents/admins only. `PATCH /tickets/{id}/action-items/{item_id} {done?, description?}`: agents/admins may change anything; the ticket's requester may only set `done` on `side=customer` items (403 otherwise). `DELETE`: agents/admins. Each change writes one ticket audit row (`ticket.action_item_added|updated|removed`). Closed tickets are read-only (409), like comments.
+- [ ] Analytics: add `backlog_by_organization` (open tickets per organisation, top 10 plus "No organisation") to `/analytics/summary`, as a SQL aggregate.
+
+**Agent console (management view).**
+- [ ] Queue table columns, in order: ID, Subject, **Organisation**, **Opened by** (requester), Priority, **Status**, SLA, **Assignee**, **Waiting on** (e.g. "Customer 2" / "LiverX 1", as text, not colour alone), Updated. Add an Organisation filter chip. Keep the 36px rows; the table can scroll horizontally below 1200px.
+- [ ] Ticket workspace header: organisation name (with a "Government" / "Company" label) and "Opened by {name}, {email}". Side panel: an Organisation select (active organisations), then a **What's needed** section with two lists, "From the customer" and "From LiverX": each item has a checkbox, text and remove action, plus an add field. Checked items show who ticked them and when.
+- [ ] Dashboard: a third chart "Open tickets by organisation" (horizontal bars, same chart rules as Phase 9; load `dataviz` first).
+
+**Customer portal.**
+- [ ] The request page shows the organisation and a **What's needed** block: "From you" (the customer can tick these) and "From LiverX" (read-only), with empty states ("Nothing needed from you right now."). "Your requests" rows add "Waiting on you: N items" when N > 0.
+
+**Admin.**
+- [ ] An **Organisations** tab: add (name + kind), rename, deactivate. The Users tab gains an Organisation select for end users.
+- [ ] Demo seed: 4 organisations (2 companies, 2 government entities, realistic names), demo customers assigned to them, demo tickets inherit them, and a few action items on active tickets. Update `docs/demo-data/` only if its README allows; otherwise add the organisations in `seed_demo.py`.
+
+- **Verify:** pytest (organisation CRUD and audit; ticket inherits the requester's organisation; the requester can tick only customer items; agents manage all; end users can't read another organisation's tickets; closed tickets are read-only; the analytics aggregate on a fixed dataset). vitest for the "Waiting on" text. Playwright: an agent sets the organisation, adds one item on each side, the customer ticks theirs, and the agent sees it ticked. Screenshots at 1280/1600 (queue, workspace) and 360/1280 (customer request), then critique; axe 0 violations.
+
+### Phase 13 — Admin bootstrap and production hardening
+- [ ] **First admin from the command line.** `python -m app.create_admin --email habusaleh@liverx.me --name "…"` asks for the password twice (no echo; `getpass`) and applies the register validator. It creates an `admin`, or promotes an existing account to admin. It never sets 2FA: the admin enrols at first sign-in. It prints nothing secret and is idempotent, and it works with `ENV=prod`. Document it in the README for local (`docker compose exec api python -m app.create_admin …`) and for Cloud Run (a one-off job, Phase 16).
+- [ ] **Staff must be LiverX addresses.** `STAFF_EMAIL_DOMAINS` (default `liverx.me`, comma-separated). `PATCH /users/{id}` and `create_admin` refuse `agent`/`admin` for any other domain (422 with a clear message). Local demo staff (`@ticketing.demo`) are allowed only when `ENV=local`.
+- [ ] **Registration switch.** `ALLOW_REGISTRATION` (default true). When false, `/auth/register` returns 403 and the frontend hides "Create account" (a public `GET /auth/config` returns `{allow_registration}`).
+- [ ] **Password-step throttling.** Limit `POST /auth/login` per email and per client IP (first `X-Forwarded-For` hop only when `TRUST_PROXY=true`): 10 failures in 15 min → 429 for 15 min. Store attempts in a small `login_attempts` table (not memory, because Cloud Run runs several instances). Prune rows older than a day in the sweep.
+- [ ] **CORS from config.** `CORS_ORIGINS` (comma-separated; default `http://localhost:5173`). In prod the SPA is same-origin (Phase 15), so CORS stays empty there.
+- [ ] **Security headers middleware:** `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `X-Frame-Options: DENY`, and a CSP that allows only self plus `data:` images (for the QR code) and the self-hosted fonts. Check the SPA still works under the CSP in the prod build.
+- [ ] `check_prod_safe` also refuses to start with `ENV=prod` and `SEED_DEMO=true`.
+- **Verify:** pytest for each item (create_admin creates/promotes/idempotent and rejects a short password; domain rule; registration off; throttling 429 and reset after the window; headers present). Run `create_admin` for real in the dev stack for `habusaleh@liverx.me`, sign in through the UI and enrol 2FA, then show the account on Admin → Users. Record it without the password.
+
+### Phase 14 — LiverX branding and one button colour
+**Needs the LiverX logo from the user.** If `frontend/src/assets/brand/` has no logo, ask for it, then carry on with Phase 15 and come back to this phase once the logo arrives. This is the one allowed exception to doing phases in order. SVG is preferred; otherwise a PNG of at least 512px with a transparent background. Also ask whether LiverX has an official brand colour (hex) and font. Don't guess a colour.
+- [ ] Put the logo in `frontend/src/assets/brand/` (and a square mark for the favicon: `frontend/public/favicon.svg` / `.png`, 32 and 180px `apple-touch-icon`).
+- [ ] **Seed colour:** the official LiverX brand colour if the user gives one. Otherwise extract it from the logo with `@material/material-color-utilities` (`QuantizerCelebi` + `Score` on the logo's pixels, in a one-off script under `frontend/scripts/`). Record the value and how it was chosen in `docs/design-plan.md` "Changes during build" and in §0. Keep `SchemeContent` and the contrast levels. Re-run the scheme tests (AA contrast at all 3 levels, primary hue within 8° of the seed). If the brand colour fails AA as `primary`, keep it as the seed and let the scheme pick the tones. Don't hardcode it.
+- [ ] **Fonts:** keep Google Sans Flex / Roboto Flex unless the user names a LiverX brand font. A brand font replaces the display face only, and must be OFL or supplied by the user.
+- [ ] **Name and logo in the UI:** the product is "LiverX Help Desk". Show the logo in the auth layout header, the end-user top app bar and the top of the agent nav rail (compact mark there), with `alt="LiverX"`. Set the `<title>` and favicon. Replace the "Support" text.
+- [ ] **One colour for every button (the user's rule).** Every `Button` is filled `primary` with `onPrimary` text: remove the `tonal`, `outlined` and `text` variants and any per-button colour overrides, and set it in the MUI theme (`MuiButton` `defaultProps: { variant: "contained" }`, variants mapped to the same style). Hover, focus and pressed use M3 state layers of `onPrimary`; disabled uses the M3 disabled treatment. This includes dialog actions (Cancel and Reset in the admin 2FA dialog look the same; order and wording make the difference), the KB panel's "Send a request" and the snackbar actions. Icon buttons, chips, links, tabs, segmented buttons and menu items are not buttons and keep their M3 styles. Add a vitest that renders each former variant and asserts the same computed colour pair, and a grep check in the audit that no `variant="outlined|text|tonal"` remains on `Button`.
+- **Verify:** typecheck/build/vitest/Playwright green (update selectors if names changed). Screenshots of login, setup, home + search results, request, queue, workspace, dashboard and admin in light and dark, at 360 and 1280/1600. Critique them against the logo (does the scheme read as LiverX?), then the `material-3` audit at ≥ 7 per category, saved to `docs/audits/phase-14-md3.md`, and axe 0 violations.
+
+### Phase 15 — Cloud-ready application (still local)
+- [ ] **Attachments on Cloud Storage.** A `Storage` protocol in `app/storage.py` with `save(key, bytes, content_type)`, `open(key) -> bytes | stream`, `delete(key)`. `LocalStorage` (today's volume, the default) and `GcsStorage` (`google-cloud-storage`, bucket from `ATTACHMENTS_BUCKET`, credentials from the Cloud Run service account: ADC, no key files). `ATTACHMENTS_BACKEND=local|gcs`. The DB keeps the object key instead of an absolute path; migrate existing rows so `file_path` is relative to the store. Downloads keep going **through the API** (the same role scoping and internal-note rule, `Content-Disposition: attachment`, `nosniff`), never public or signed URLs. The bucket is private with uniform bucket-level access. Tests: the existing attachment tests run against `LocalStorage`; `GcsStorage` gets unit tests with the client mocked (key naming, content type, no public ACL).
+- [ ] **SLA sweeps over HTTP for Cloud Scheduler.** `POST /internal/sweeps` runs `run_sweeps_once(now)` and returns what changed. Auth is a Google-signed OIDC token: verify it with `google.oauth2.id_token.verify_oauth2_token` against `SWEEP_AUDIENCE` (the service URL) and check the caller's email equals `SWEEP_INVOKER_EMAIL`. Verify this API against the google-auth docs; don't write it from memory. Reject everything else with 401/403. Locally the `worker` container keeps looping (`SWEEPS_MODE=loop`); in prod there's no worker. The sweep's `FOR UPDATE SKIP LOCKED` already makes overlapping runs safe. Tests: a valid token (mocked verifier) runs the sweeps; missing, wrong-audience and wrong-email tokens are refused.
+- [ ] **One production container.** Add a root `Dockerfile.prod`: stage 1 runs `npm ci && npm run build` for the frontend; stage 2 is `python:3.12-slim` with `uv sync --frozen --no-dev` (runtime deps only), copies `frontend/dist` into the image, and runs as a non-root user. `uvicorn` binds `0.0.0.0:$PORT` (Cloud Run sets `PORT`), with `--proxy-headers --forwarded-allow-ips='*'` and no `--reload`. A prod entry `app/prod.py` mounts the API at `/api` and serves the SPA from `dist` with an `index.html` fallback for client routes, plus long-cache headers for hashed assets and `no-cache` for `index.html`. The browser then calls the same `/api/...` paths as in dev (Vite strips `/api` there), and there's no CORS. `/health` stays reachable at `/api/health`.
+- [ ] **Migrations are not run on web start in prod.** `alembic upgrade head` runs as a separate Cloud Run job step (Phase 16). The dev compose command is unchanged.
+- [ ] **Cloud SQL connection.** `DATABASE_URL` supports the Cloud Run Unix socket form `postgresql+asyncpg://USER:PASS@/DB?host=/cloudsql/PROJECT:REGION:INSTANCE`. Verify asyncpg/SQLAlchemy accept it, and test it with a local socket if possible. Keep the pool small (`pool_size=5, max_overflow=2`) because `db-f1-micro` allows few connections. Add `pool_pre_ping=True`.
+- [ ] **Structured logs:** one JSON line per request (method, path, status, latency, user id if any, **never** tokens, codes or passwords), so Cloud Logging can filter them.
+- [ ] Add a `docker-compose.prod-local.yml` that runs `Dockerfile.prod` against the local db with `ENV=prod` and `ATTACHMENTS_BACKEND=local`, to prove the prod image works before touching GCP.
+- **Verify:** pytest (storage, sweep auth), then `docker compose -f docker-compose.prod-local.yml up --build`. Check: the SPA loads at `/`, a deep link (`/agent/tickets/1`) loads, `/api/health` is ok, sign-in with 2FA works, upload/download works, the CSP doesn't break anything (browser console clean), `curl -X POST /api/internal/sweeps` without a token is 401, and the image runs as non-root. Report the image size.
+
+### Phase 16 — Deploy to Google Cloud
+**Needs the user; stop and ask for these at the start:** the GCP project ID (or permission to create one), that billing is enabled, the region (default `me-central2` for users in the Gulf/Levant if Cloud SQL `db-f1-micro` and Cloud Run are offered there; otherwise `europe-west1`; check the pricing calculator for both and show the user the monthly estimate before creating anything billable), and that they've run `gcloud auth login` in this machine's terminal. Load the `google-cloud-platform` skill first. Verify every `gcloud` flag against `gcloud … --help` or the docs, not memory. Script everything in `deploy/` (idempotent bash scripts plus a README) so it can be re-run.
+- [ ] **APIs:** run, sqladmin, secretmanager, cloudscheduler, artifactregistry, storage, cloudbuild, iam.
+- [ ] **Service accounts (least privilege):** `helpdesk-run` (Cloud SQL Client, Secret Manager Secret Accessor on these secrets only, Storage Object Admin on the attachments bucket only, Logging Writer); `helpdesk-scheduler` (Cloud Run Invoker on the service only).
+- [ ] **Cloud SQL:** PostgreSQL 16, Enterprise edition, `db-f1-micro`, HDD, 10 GB with auto-increase, zonal, automated daily backups kept 7 days, point-in-time recovery off (cost), deletion protection on. No public IP if the Cloud Run connector setup allows it; otherwise public IP with **no authorised networks** (the Cloud SQL connector/socket only). Database `helpdesk`, user `helpdesk` with a generated password.
+- [ ] **Secrets in Secret Manager:** `JWT_SECRET` (64 random bytes), `DB_PASSWORD` (or the full `DATABASE_URL`). Never put them in a script, the repo or a log.
+- [ ] **Storage:** a private bucket `…-helpdesk-attachments` in the same region, uniform access, public access prevention enforced, soft delete at the default.
+- [ ] **Image:** Artifact Registry repo; build `Dockerfile.prod` with Cloud Build and tag it with the git SHA.
+- [ ] **Cloud Run service `helpdesk`:** `min-instances=0`, `max-instances=3`, 1 vCPU / 512 MiB, CPU only during requests, concurrency 40, the Cloud SQL instance attached, the `helpdesk-run` service account, and env `ENV=prod`, `ATTACHMENTS_BACKEND=gcs`, `ATTACHMENTS_BUCKET`, `STAFF_EMAIL_DOMAINS=liverx.me`, `TRUST_PROXY=true`, `SWEEP_AUDIENCE`, `SWEEP_INVOKER_EMAIL`, plus the secrets from Secret Manager. `--allow-unauthenticated` (the app does its own auth).
+- [ ] **Migrations job:** a Cloud Run job from the same image running `alembic upgrade head`, executed on every deploy before traffic moves. **Admin job:** `python -m app.create_admin --email habusaleh@liverx.me …`, run once. The password comes from a one-off secret the user sets, deleted afterwards; or the user runs it interactively via `gcloud run jobs execute` if the CLI allows it. Decide with the user.
+- [ ] **Cloud Scheduler:** `helpdesk-sweeps`, every minute, `POST https://…/api/internal/sweeps` with an OIDC token for `helpdesk-scheduler`, audience = the service URL.
+- [ ] **Budget alert** on the billing account (ask the user for the amount; suggest $30/month) at 50/90/100%.
+- [ ] **Custom domain (optional; ask):** for example `helpdesk.liverx.me`. Use Cloud Run domain mapping if it's available in the region, otherwise a global external load balancer. **Warn the user first:** the load balancer costs about $18+/month.
+- **Verify:** `gcloud run services describe` shows the settings above; `/api/health` is ok over HTTPS; the migrations job succeeded; the Scheduler job's last run is 200 and the logs show a sweep; an upload lands in the bucket and downloads through the app; the bucket and DB aren't publicly reachable (unauthenticated `curl` on the bucket object URL gives 403/401). Report the estimated monthly cost from the calculator.
+
+### Phase 17 — Go-live acceptance on Google Cloud
+- [ ] `habusaleh@liverx.me` signs in on the live URL and enrols 2FA, then creates one agent (a real `@liverx.me` colleague, with the user's consent) and one test customer in a test organisation.
+- [ ] Walk the flow on the live site: the customer registers (or is created) with 2FA → submits a ticket with an attachment → the agent sets organisation/category/priority, triages, assigns, adds action items on both sides → the customer ticks theirs and replies → pending pauses the SLA → resolved → closed. Screenshot each step into `docs/screenshots/phase-17/`.
+- [ ] Check the SLA sweep escalates an at-risk urgent test ticket within about 2 minutes (the Scheduler logs plus the ticket's history).
+- [ ] Restore test: create a backup on demand, restore it to a **new temporary** instance, check the row counts, delete the temporary instance. Record the steps in `deploy/README.md` as the runbook.
+- [ ] Clean up: delete the test tickets/users if the user wants; confirm no demo accounts exist in prod (`/users` lists only real people).
+- [ ] Final hand-over note for the user: the live URL, how to add staff and organisations, how to reset someone's 2FA, how to redeploy (`deploy/deploy.sh`), the monthly cost, and where logs and backups are.
+- **Verify:** every step above has evidence; anything not observed is marked as not verified.
 
 ---
 
@@ -601,7 +692,7 @@ Deploy only after the user has reviewed the Phase 11 summary. Cheapest database:
 | Local volume attachments | Cloud Storage | `Storage` protocol (`save/open`); keep it to one small module |
 | uvicorn containers | Cloud Run (api, worker, frontend static) | Dockerfiles already 12-factor; frontend has a prod build stage |
 
-Out of scope (do **not** build): email/social intake, sentiment, in-thread draft generation beyond the triage draft, ADK multi-agent triage, an automation rules engine, and GCP deployment.
+Out of scope (do **not** build): email/social intake, any AI feature, an automation rules engine. GCP deployment is now in scope (Phases 15–17).
 
 ---
 
