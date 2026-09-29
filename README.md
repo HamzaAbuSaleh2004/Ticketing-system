@@ -67,8 +67,8 @@ The local demo accounts above already have it set up on a shared, published key:
 
 Stated before any screen was built, as the brief asks. The full plan is in [docs/design-plan.md](docs/design-plan.md).
 
-- **Seed colour:** `#1E6A5E` ("Spruce", a deep blue-green). At runtime, `@material/material-color-utilities` `SchemeContent` expands it into every Material 3 colour role for light and dark, at three contrast levels (Appearance menu). Components use only the `--md-sys-color-*` roles; there's no hand-picked palette.
-- **Typefaces:** **Google Sans Flex** for display and headlines (with its `ROND` axis rounded in the customer portal and square in the console), and **Roboto Flex** for body, labels and data. Figures are tabular for IDs and countdowns. There's no monospace face.
+- **Seed colour:** `#00A4D8` (LiverX Bright Cyan Blue). At runtime, `@material/material-color-utilities` `SchemeContent` expands it into every Material 3 colour role for light and dark, at three contrast levels (Appearance menu). Components use only the `--md-sys-color-*` roles; there's no hand-picked palette.
+- **Typefaces:** **IBM Plex Sans** for every role (display, headlines, body, labels and data), with **Tajawal** after it in the stack for Arabic text. Figures are tabular for IDs and countdowns. There's no monospace face.
 - **Tone:** calm, spacious and reassuring for the customer portal; dense, scannable and efficient for the agent console.
 - **Signature elements:** the grounded KB answer panel (customer) and the SLA ring on every queue row (agent).
 - **Elevation:** tonal surfaces only, with no drop shadows.

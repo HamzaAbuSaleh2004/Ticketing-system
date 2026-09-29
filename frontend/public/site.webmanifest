@@ -1,0 +1,11 @@
+{
+  "name": "LiverX Help Desk",
+  "short_name": "LiverX",
+  "icons": [
+    { "src": "/favicon.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ],
+  "theme_color": "#00a4d8",
+  "background_color": "#ffffff",
+  "display": "standalone"
+}

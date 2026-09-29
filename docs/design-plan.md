@@ -4,41 +4,40 @@ Written before any component code, following `frontend-design`'s two passes: pla
 
 ## 1. Stated up front (brief: "before generating any screen, state…")
 
-- **Seed colour:** `#1E6A5E` ("Spruce", a deep blue-green), expanded at runtime by `@material/material-color-utilities` `SchemeContent` into every M3 role, light and dark, at contrast levels 0 / 0.5 / 1.0.
-- **Display typeface:** Google Sans Flex (`'Google Sans Flex Variable'`, self-hosted via `@fontsource-variable/google-sans-flex/rond.css`: `wght` 1–1000 + `ROND` 0–100, OFL).
-- **Body typeface:** Roboto Flex (`'Roboto Flex Variable'`, via `@fontsource-variable/roboto-flex/opsz.css`: `wght` 100–1000 + `opsz` 8–144, OFL). It's also used for data, with `font-variant-numeric: tabular-nums`. There is no monospace face.
+- **Seed colour:** `#00A4D8` (LiverX Bright Cyan Blue, `docs/brand/liverx-brand-guideline.pdf`), expanded at runtime by `@material/material-color-utilities` `SchemeContent` into every M3 role, light and dark, at contrast levels 0 / 0.5 / 1.0. **(Phase 15; was `#1E6A5E` "Spruce" — see §8.7.)**
+- **Display and body typeface:** IBM Plex Sans (`'IBM Plex Sans'`, self-hosted via `@fontsource/ibm-plex-sans` weights 400/500/700, OFL), with **Tajawal** after it in the stack for Arabic text. One family carries every role — there's no separate display face. **(Phase 15; was Google Sans Flex + Roboto Flex.)**
 - **Tone:** calm, spacious and reassuring for the end-user portal; dense, scannable and efficient for the agent console.
 
-Both font packages were checked in their shipped `metadata.json` on 2026-09-24, including family names, axis tags and ranges, and `font-display: swap`.
+The IBM Plex Sans and Tajawal packages were checked in their shipped weight manifests on 2026-09-29, including family names, available static weights and `font-display: swap`.
 
 ## 2. Colour: what the seed actually generates
 
-Measured from `SchemeContent(Hct(#1E6A5E), isDark, 0)`, not assumed:
+Measured from `SchemeContent(Hct(#00A4D8), isDark, 0)`, not assumed:
 
 | Role | Light | Dark | Used for |
 |---|---|---|---|
-| primary | `#005147` | `#8DD4C5` | Filled buttons, focus, the KB answer's source chips |
-| primary-container | `#1E6A5E` (the seed itself) | `#1E6A5E` | The KB answer panel ground in the end-user portal; selected nav item |
-| secondary-container | `#CCE9E1` | `#324C46` | Tonal buttons, filter chips (selected), status chips |
-| tertiary / container | `#4D3F71` / `#65578A` | `#CFBEF8` / `#65578A` | "Attention": internal notes, SLA at risk |
+| primary | `#006688` | `#75D1FF` | Filled buttons, focus, the KB answer's source chips |
+| primary-container | `#00A4D8` (the seed itself) | `#00A4D8` | The KB answer panel ground in the end-user portal; selected nav item |
+| secondary-container | `#BDE5FD` | `#234B5F` | Tonal buttons, filter chips (selected), status chips |
+| tertiary / container | `#7D469D` / `#BC81DC` | `#E6B4FF` / `#BC81DC` | "Attention": internal notes, SLA at risk |
 | error / container | `#BA1A1A` / `#FFDAD6` | `#FFB4AB` / `#93000A` | SLA breached, destructive actions |
-| surface → container-highest | `#F7FAF8` → `#E0E3E1` | `#101413` → `#323634` | Tonal elevation ladder (no shadows) |
-| outline-variant | `#BEC9C5` | `#3F4946` | Dividers and table rules |
+| surface → container-highest | `#F5FAFE` → `#DEE3E7` | `#0F1417` → `#303539` | Tonal elevation ladder (no shadows) |
+| outline-variant | `#BDC8D0` | `#3E484F` | Dividers and table rules |
 
-Hex values appear only in the generated theme at runtime. Components reference `var(--md-sys-color-*)` or the MUI palette mapped from the same scheme object.
+Hex values appear only in the generated theme at runtime. Components reference `var(--md-sys-color-*)` or the MUI palette mapped from the same scheme object. The measured light `primary` (`#006688`) sits 0.85° from the brand's Teal Blue `#007BA2` on the hue wheel — well inside the scheme reading as LiverX.
 
 ## 3. Type scale (M3 roles → faces)
 
 | Role | Face | Size / line (px) | Weight | Notes |
 |---|---|---|---|---|
-| display-L/M/S | Google Sans Flex | 57/64, 45/52, 36/44 | 400 | Only on auth screens and the dashboard's stat figures |
-| headline-L/M/S | Google Sans Flex | 32/40, 28/36, 24/32 | 400 | Page titles in the end-user portal |
-| title-L/M/S | Roboto Flex | 22/28, 16/24 (500), 14/20 (500) | 400/500 | Pane titles, ticket subjects |
-| body-L/M/S | Roboto Flex | 16/24, 14/20, 12/16 | 400 | Body text |
-| label-L/M/S | Roboto Flex | 14/20, 12/16, 11/16 | 500 | Buttons, chips, column headers (sentence case) |
+| display-L/M/S | IBM Plex Sans | 57/64, 45/52, 36/44 | 400 | Only on auth screens and the dashboard's stat figures |
+| headline-L/M/S | IBM Plex Sans | 32/40, 28/36, 24/32 | 400 | Page titles in the end-user portal |
+| title-L/M/S | IBM Plex Sans | 22/28, 16/24 (500), 14/20 (500) | 400/500 | Pane titles, ticket subjects |
+| body-L/M/S | IBM Plex Sans | 16/24, 14/20, 12/16 | 400 | Body text |
+| label-L/M/S | IBM Plex Sans | 14/20, 12/16, 11/16 | 500 | Buttons, chips, column headers (sentence case) |
 
-- **ROND** on Google Sans Flex: 60 in the end-user portal, 0 in the agent console, set with `font-variation-settings` on a portal root class. One family carries two personalities.
-- **opsz** on Roboto Flex is automatic (`font-optical-sizing: auto`), so 13px table text gets the small-size cut.
+- One face, every role: IBM Plex Sans replaces the former display/body split (Google Sans Flex's variable `ROND` axis, used to give the two portals distinct personalities, is gone with it — the end-user vs. agent contrast is now carried entirely by density, size and surfaces, which already differed).
+- IBM Plex Sans ships as static weights (400/500/700), not a variable font, so there's no optical-sizing axis; `font-variant-numeric: tabular-nums` still gives tables and IDs tabular figures.
 - `textTransform: 'none'` everywhere. Tracking comes from the M3 tokens and is never widened for labels.
 
 ## 4. Shape, elevation, motion, density
@@ -119,7 +118,8 @@ Alignment: text is left-aligned everywhere. Numbers in tables and tiles are righ
 3. **"Your requests" nearly became cards with status badges.** That's the brief's banned card grid. It stays a divided list: subject, a human status line, and relative time in separate columns, with no middle-dot meta string.
 4. **The auth screens were drafted as a centred card on a tinted page.** That's the generic default login. Changed to a left-aligned headline beside the form (stacked on compact widths), so it shares the end-user portal's calm, left-aligned column.
 5. **Agent density check.** A first draft used the same 16px body and 56px inputs as the end user. That fails the brief's requirement for deliberately different density. Compact density is now a context the agent shell sets, not per-component props.
-6. **Monospace for ticket IDs** was already removed in §0. Kept out: IDs like `TCK-00042` use Roboto Flex tabular figures.
+6. **Monospace for ticket IDs** was already removed in §0. Kept out: IDs like `TCK-00042` use tabular figures.
+7. **(Phase 15) The LiverX brand guideline replaces the placeholder Spruce scheme and Google Sans Flex/Roboto Flex pairing**, per the scope-change note at the top of PLAN.md. Seed: `#00A4D8` (measured light `primary` `#006688`, 0.85° from the brand's `#007BA2`). Typeface: IBM Plex Sans throughout (with Tajawal for Arabic), replacing the two-face display/body split — the ROND-axis personality difference between portals is gone; density, size and surface already carried that contrast, so nothing was added to replace it. Every `Button` also became one filled-primary style (the user's rule), so `tonal`/`outlined`/`text` no longer appear as distinct button looks — the KB panel and SLA ring signature elements are unaffected, since neither is a button.
 
 ## 9. Build notes
 

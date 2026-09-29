@@ -44,7 +44,7 @@ export function QueuePage() {
           <Typography variant="bodyLarge" sx={{ mb: 2 }}>
             The queue didn't load.
           </Typography>
-          <Button variant="outlined" onClick={() => queue.refetch()}>
+          <Button onClick={() => queue.refetch()}>
             Try again
           </Button>
         </Box>

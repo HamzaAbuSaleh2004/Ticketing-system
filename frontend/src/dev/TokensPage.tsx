@@ -102,10 +102,7 @@ export function TokensPage() {
         ))}
       </Stack>
       <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1.5, alignItems: "center" }}>
-        <Button variant="contained">Filled</Button>
-        <Button variant="outlined">Outlined</Button>
-        <Button variant="text">Text</Button>
-        <Button variant="tonal">Tonal</Button>
+        <Button>Filled</Button>
         <Chip label="Filter chip" />
         <Chip label="Outlined chip" variant="outlined" />
         <TextField label="Text field" size="small" />

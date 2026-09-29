@@ -184,12 +184,10 @@ export function TicketSidePanel({
 
         <Box>
           <Button
-            variant="outlined"
             size="small"
             startIcon={<TrendingUpOutlined />}
             disabled={patching || !canEscalate}
             onClick={() => onPatch({ escalate: true })}
-            sx={{ color: sys("error"), borderColor: sys("outline") }}
           >
             Escalate
           </Button>

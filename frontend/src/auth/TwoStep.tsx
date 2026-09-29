@@ -277,7 +277,6 @@ function RecoveryCodes({ enabled, onDone }: { enabled: MfaEnabled; onDone: (u: U
             I've saved them, continue
           </Button>
           <Button
-            variant="outlined"
             size="large"
             onClick={() =>
               navigator.clipboard

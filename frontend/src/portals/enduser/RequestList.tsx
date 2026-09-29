@@ -16,7 +16,7 @@ export function RequestList({ items, isLoading, isError, onRetry }: Props) {
         <Typography variant="bodyLarge" sx={{ color: sys("onSurfaceVariant"), mb: 2 }}>
           Your requests didn't load. Check your connection and try again.
         </Typography>
-        <Button variant="outlined" onClick={onRetry}>
+        <Button onClick={onRetry}>
           Try again
         </Button>
       </Box>

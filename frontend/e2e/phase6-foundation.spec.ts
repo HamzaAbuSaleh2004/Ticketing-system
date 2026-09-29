@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { enrollTwoStep, shot, signIn, signInPassword } from "./helpers";
+import { enrollTwoStep, settled, shot, signIn, signInPassword } from "./helpers";
 import { nextCode } from "./totp";
 
 for (const colorScheme of ["light", "dark"] as const) {
@@ -15,7 +15,7 @@ for (const colorScheme of ["light", "dark"] as const) {
       const primary = await page.evaluate(() =>
         getComputedStyle(document.documentElement).getPropertyValue("--md-sys-color-primary").trim(),
       );
-      expect(primary).toBe(colorScheme === "light" ? "#005147" : "#8dd4c5");
+      expect(primary).toBe(colorScheme === "light" ? "#006688" : "#75d1ff");
       await shot(page, "phase-6", `tokens-${colorScheme}`);
 
       await page.goto("/login");
@@ -28,16 +28,16 @@ for (const colorScheme of ["light", "dark"] as const) {
   });
 }
 
-test("fonts: display is Google Sans Flex, body is Roboto Flex, no monospace", async ({ page }) => {
+test("fonts: IBM Plex Sans everywhere, no monospace", async ({ page }) => {
   await page.goto("/login");
   const heading = page.getByRole("heading", { name: "Sign in" });
-  expect(await heading.evaluate((el) => getComputedStyle(el).fontFamily)).toContain("Google Sans Flex");
+  expect(await heading.evaluate((el) => getComputedStyle(el).fontFamily)).toContain("IBM Plex Sans");
   const button = page.getByRole("button", { name: "Sign in" });
   const style = await button.evaluate((el) => {
     const s = getComputedStyle(el);
     return { font: s.fontFamily, transform: s.textTransform, shadow: s.boxShadow, radius: s.borderRadius };
   });
-  expect(style.font).toContain("Roboto Flex");
+  expect(style.font).toContain("IBM Plex Sans");
   expect(style.transform).toBe("none");
   expect(style.shadow).toBe("none");
   expect(style.radius).toBe("9999px");
@@ -106,6 +106,7 @@ test("two-step verification: setup screens, a wrong code, and a recovery code", 
   await shot(page, "phase-11", "setup-dark-360");
   await page.emulateMedia({ colorScheme: "light" });
   await page.setViewportSize({ width: 1280, height: 900 });
+  await settled(page);
   const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   expect(axe.violations.map((v) => v.id), "setup screen axe").toEqual([]);
   await page.getByLabel("6-digit code").fill("000000");

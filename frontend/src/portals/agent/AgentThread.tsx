@@ -166,7 +166,6 @@ export function AgentThread({ ticket }: { ticket: TicketDetail }) {
             <Button
               key={a.id}
               size="small"
-              variant="outlined"
               startIcon={<AttachFileOutlined />}
               onClick={() => downloadAttachment(a.id, a.filename).catch(() => undefined)}
             >

@@ -16,7 +16,7 @@ const contrastRatio = (a: string, b: string) => {
   return (hi + 0.05) / (lo + 0.05);
 };
 
-describe("scheme from the Spruce seed", () => {
+describe("scheme from the LiverX seed", () => {
   it("keeps the primary on the seed's hue (SchemeContent, not TonalSpot)", () => {
     const seedHue = Hct.fromInt(argbFromHex(SEED)).hue;
     for (const dark of [false, true]) {
@@ -59,11 +59,12 @@ describe("scheme from the Spruce seed", () => {
 });
 
 describe("tokens and MUI theme", () => {
-  it("emits shape, typescale and motion vars with the two faces", () => {
+  it("emits shape, typescale and motion vars with one face for every role", () => {
     const vars = staticCssVars();
     expect(vars["--md-sys-shape-corner-full"]).toBe("9999px");
-    expect(vars["--md-sys-typescale-display-large-font"]).toContain("Google Sans Flex");
-    expect(vars["--md-sys-typescale-body-large-font"]).toContain("Roboto Flex");
+    expect(vars["--md-sys-typescale-display-large-font"]).toBe(vars["--md-sys-typescale-body-large-font"]);
+    expect(vars["--md-sys-typescale-body-large-font"]).toContain("IBM Plex Sans");
+    expect(vars["--md-sys-typescale-body-large-font"]).toContain("Tajawal");
     expect(vars["--md-sys-typescale-body-large-font"]).not.toMatch(/mono|Inter|system-ui/i);
     expect(vars["--md-sys-motion-easing-emphasized"]).toBe("cubic-bezier(0.2, 0, 0, 1)");
   });
@@ -77,5 +78,17 @@ describe("tokens and MUI theme", () => {
     expect(comfortable.palette.primary.main).toBe(scheme.primary);
     expect(comfortable.typography.body1.fontSize).toContain("body-large");
     expect(compact.typography.body1.fontSize).toContain("body-medium");
+  });
+
+  it("every Button variant renders the same filled-primary colour pair (one button colour, PLAN.md Phase 15)", () => {
+    const theme = buildMuiTheme(generateScheme(false), false, "comfortable");
+    const variants = theme.components?.MuiButton?.variants as { props: { variant: string }; style: Record<string, unknown> }[];
+    const byVariant = Object.fromEntries(variants.map((v) => [v.props.variant, v.style]));
+    expect(Object.keys(byVariant).sort()).toEqual(["contained", "outlined", "text", "tonal"]);
+    const pairs = Object.values(byVariant).map((s) => [s.backgroundColor, s.color]);
+    expect(new Set(pairs.map((p) => JSON.stringify(p)))).toHaveProperty("size", 1);
+    expect(byVariant.contained.backgroundColor).toBe(theme.palette.primary.main);
+    expect(byVariant.contained.color).toBe(theme.palette.primary.contrastText);
+    expect(theme.components?.MuiButton?.defaultProps).toMatchObject({ variant: "contained" });
   });
 });

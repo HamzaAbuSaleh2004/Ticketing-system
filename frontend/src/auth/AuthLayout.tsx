@@ -1,5 +1,6 @@
 import { Box, Typography } from "@mui/material";
 import type { ReactNode } from "react";
+import { LiverXWordmark } from "../components/Logo";
 import { ThemeMenu } from "../components/ThemeMenu";
 import { sys } from "../theme/scheme";
 
@@ -12,9 +13,7 @@ export function AuthLayout({ title, intro, children }: { title: string; intro: s
         component="header"
         sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: { xs: 2, sm: 3 }, height: 64 }}
       >
-        <Typography variant="titleLarge" component="span" sx={{ fontFamily: "var(--md-sys-typescale-headline-small-font)" }}>
-          Support
-        </Typography>
+        <LiverXWordmark />
         <ThemeMenu />
       </Box>
       <Box

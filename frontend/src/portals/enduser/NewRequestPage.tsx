@@ -108,7 +108,7 @@ export function NewRequestPage() {
                 sx={{ maxWidth: "100%" }}
               />
             ) : (
-              <Button variant="outlined" startIcon={<AttachFileOutlined />} onClick={() => fileInput.current?.click()}>
+              <Button startIcon={<AttachFileOutlined />} onClick={() => fileInput.current?.click()}>
                 Attach a file
               </Button>
             )}

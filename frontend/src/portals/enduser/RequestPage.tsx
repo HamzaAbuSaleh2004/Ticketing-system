@@ -252,7 +252,6 @@ export function RequestPage() {
             {ticket.attachments.map((a) => (
               <Button
                 key={a.id}
-                variant="outlined"
                 startIcon={<AttachFileOutlined />}
                 onClick={() => downloadAttachment(a.id, a.filename).catch(() => setToast("That file couldn't be downloaded."))}
               >

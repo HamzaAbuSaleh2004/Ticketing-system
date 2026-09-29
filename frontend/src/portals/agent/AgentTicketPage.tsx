@@ -106,7 +106,7 @@ export function AgentTicketPage() {
     return (
       <Box sx={{ p: 3 }}>
         <Typography variant="titleLarge">That ticket doesn't exist</Typography>
-        <Button component={RouterLink} to={`/agent${search}`} sx={{ mt: 2 }} variant="outlined">
+        <Button component={RouterLink} to={`/agent${search}`} sx={{ mt: 2 }}>
           Back to the queue
         </Button>
       </Box>

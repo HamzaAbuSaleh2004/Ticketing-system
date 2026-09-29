@@ -38,7 +38,6 @@ export function HomePage() {
           component={RouterLink}
           to="/requests/new"
           startIcon={<AddOutlined />}
-          variant="tonal"
         >
           New request
         </Button>

@@ -1,6 +1,6 @@
 import { createTheme, type Shadows, type Theme, type TypographyStyle } from "@mui/material/styles";
 import type { ColorScheme } from "./scheme";
-import { BODY_FONT, SHAPE, TYPESCALE, type TypeRoleName } from "./tokens";
+import { FONT, SHAPE, TYPESCALE, type TypeRoleName } from "./tokens";
 
 export type Density = "comfortable" | "compact";
 
@@ -46,27 +46,20 @@ declare module "@mui/material/Typography" {
 
 export const toCamel = (role: string) => role.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()) as M3Variant;
 
-function variant(role: TypeRoleName, rond: number): TypographyStyle {
+function variant(role: TypeRoleName): TypographyStyle {
   const p = `--md-sys-typescale-${role}`;
-  const isDisplay = TYPESCALE[role].font === "display";
   return {
     fontFamily: `var(${p}-font)`,
     fontSize: `var(${p}-size)`,
     lineHeight: `var(${p}-line-height)`,
     fontWeight: `var(${p}-weight)` as TypographyStyle["fontWeight"],
     letterSpacing: `var(${p}-tracking)`,
-    // ROND per portal: rounded (60) for the calm end-user portal, 0 for the
-    // agent console. It's in the theme (not a CSS var on a wrapper) so
-    // Menus/Dialogs portalled to <body> still get their portal's value.
-    ...(isDisplay ? { fontVariationSettings: `'ROND' ${rond}` } : {}),
   };
 }
 
-export const ROND = { comfortable: 60, compact: 0 } as const;
-
-function m3VariantsFor(density: Density) {
+function m3VariantsFor() {
   return Object.fromEntries(
-    (Object.keys(TYPESCALE) as TypeRoleName[]).map((role) => [toCamel(role), variant(role, ROND[density])]),
+    (Object.keys(TYPESCALE) as TypeRoleName[]).map((role) => [toCamel(role), variant(role)]),
   ) as Record<M3Variant, TypographyStyle>;
 }
 
@@ -91,7 +84,7 @@ const variantMapping: Record<M3Variant, string> = {
 export function buildMuiTheme(scheme: ColorScheme, isDark: boolean, density: Density): Theme {
   const c = scheme;
   const compact = density === "compact";
-  const m3Variants = m3VariantsFor(density);
+  const m3Variants = m3VariantsFor();
   const body = compact ? m3Variants.bodyMedium : m3Variants.bodyLarge;
 
   return createTheme({
@@ -113,7 +106,7 @@ export function buildMuiTheme(scheme: ColorScheme, isDark: boolean, density: Den
     // M3 communicates elevation with tonal surfaces, never shadows.
     shadows: Array(25).fill("none") as Shadows,
     typography: {
-      fontFamily: BODY_FONT,
+      fontFamily: FONT,
       ...m3Variants,
       h1: m3Variants.headlineLarge,
       h2: m3Variants.headlineMedium,
@@ -145,19 +138,26 @@ export function buildMuiTheme(scheme: ColorScheme, isDark: boolean, density: Den
       MuiTypography: { defaultProps: { variantMapping } },
       MuiButtonBase: { defaultProps: { disableRipple: false } },
       MuiButton: {
-        defaultProps: { disableElevation: true },
-        variants: [
-          {
-            // M3 filled tonal button: secondary-container, for secondary actions.
-            props: { variant: "tonal" },
-            style: {
-              backgroundColor: c.secondaryContainer,
-              color: c.onSecondaryContainer,
-              "&:hover": { backgroundColor: `color-mix(in srgb, ${c.onSecondaryContainer} 8%, ${c.secondaryContainer})` },
-              "&.Mui-disabled": { backgroundColor: `color-mix(in srgb, ${c.onSurface} 12%, transparent)` },
+        // The user's rule: every Button is filled primary with onPrimary
+        // text, whichever variant it's asked for. `tonal`/`outlined`/`text`
+        // are mapped to the same style rather than deleted, as a safety net
+        // for any that slip through (the audit greps that none do in JSX).
+        defaultProps: { disableElevation: true, variant: "contained" },
+        variants: (["contained", "tonal", "outlined", "text"] as const).map((v) => ({
+          props: { variant: v },
+          style: {
+            backgroundColor: c.primary,
+            color: c.onPrimary,
+            border: "none",
+            "&:hover": { backgroundColor: `color-mix(in srgb, ${c.onPrimary} 8%, ${c.primary})` },
+            "&:focus-visible": { backgroundColor: `color-mix(in srgb, ${c.onPrimary} 10%, ${c.primary})` },
+            "&:active": { backgroundColor: `color-mix(in srgb, ${c.onPrimary} 10%, ${c.primary})` },
+            "&.Mui-disabled": {
+              color: `color-mix(in srgb, ${c.onSurface} 38%, transparent)`,
+              backgroundColor: `color-mix(in srgb, ${c.onSurface} 12%, transparent)`,
             },
           },
-        ],
+        })),
         styleOverrides: {
           root: {
             borderRadius: "var(--md-sys-shape-corner-full)",
@@ -170,7 +170,6 @@ export function buildMuiTheme(scheme: ColorScheme, isDark: boolean, density: Den
             // >= 8px between stacked buttons so padded areas don't overlap.
             "&::after": { content: '""', position: "absolute", inset: compact ? "-6px 0" : "-4px 0" },
           },
-          outlined: { borderColor: c.outline },
           sizeSmall: { minHeight: 32, paddingInline: 16, "&::after": { inset: "-8px 0" } },
         },
       },

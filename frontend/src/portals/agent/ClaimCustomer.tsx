@@ -30,7 +30,6 @@ export function ClaimCustomer({ ticketId, onError }: { ticketId: number; onError
         />
         <Button
           size="small"
-          variant="tonal"
           disabled={!customer || patch.isPending}
           onClick={() =>
             customer &&

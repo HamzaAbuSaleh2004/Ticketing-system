@@ -106,7 +106,7 @@ export function DashboardPage() {
           <Typography variant="bodyLarge" sx={{ mb: 2 }}>
             The dashboard didn't load.
           </Typography>
-          <Button variant="outlined" onClick={() => query.refetch()}>
+          <Button onClick={() => query.refetch()}>
             Try again
           </Button>
         </Box>

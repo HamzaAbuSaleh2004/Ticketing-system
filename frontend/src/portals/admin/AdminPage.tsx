@@ -37,7 +37,7 @@ function QueryState({ query, children }: { query: { isLoading: boolean; isError:
         <Typography variant="bodyMedium" sx={{ mb: 1 }}>
           This didn't load.
         </Typography>
-        <Button variant="outlined" size="small" onClick={() => query.refetch()}>
+        <Button size="small" onClick={() => query.refetch()}>
           Try again
         </Button>
       </Box>
@@ -161,7 +161,7 @@ function UsersTab({ notify }: { notify: (m: string) => void }) {
   return (
     <QueryState query={users}>
     <Box sx={{ mb: 1.5 }}>
-      <Button variant="tonal" size="small" onClick={() => setAddingStaff(true)}>
+      <Button size="small" onClick={() => setAddingStaff(true)}>
         Add admin or agent
       </Button>
     </Box>
@@ -359,7 +359,6 @@ function OrganizationRow({ org, notify }: { org: Organization; notify: (m: strin
       </TableCell>
       <TableCell sx={cellSx} align="right">
         <Button
-          variant="tonal"
           size="small"
           disabled={!dirty || save.isPending}
           aria-label={`Save name for ${org.name}`}
@@ -521,7 +520,6 @@ function SlaRow({ policy, notify }: { policy: SlaPolicy; notify: (m: string) => 
       ))}
       <TableCell sx={cellSx} align="right">
         <Button
-          variant="tonal"
           size="small"
           disabled={!dirty || !valid || save.isPending}
           onClick={() =>

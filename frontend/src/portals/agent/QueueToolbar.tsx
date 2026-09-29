@@ -69,7 +69,7 @@ export function QueueToolbar({
             }}
           />
         </Box>
-        <Button component={RouterLink} to="/agent/tickets/new" startIcon={<AddOutlined />} variant="tonal">
+        <Button component={RouterLink} to="/agent/tickets/new" startIcon={<AddOutlined />}>
           New ticket
         </Button>
       </Stack>

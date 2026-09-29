@@ -6,6 +6,7 @@ import type { ReactElement } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { AccountMenu } from "../../components/AccountMenu";
+import { LiverXIcon } from "../../components/Logo";
 import { ThemeMenu } from "../../components/ThemeMenu";
 import { sys } from "../../theme/scheme";
 import { DensityScope } from "../../theme/ThemeController";
@@ -104,6 +105,11 @@ export function AgentShell() {
             }
       }
     >
+      {compact ? null : (
+        <Box sx={{ mb: 1 }}>
+          <LiverXIcon size={28} />
+        </Box>
+      )}
       {items.map((item) => (
         <RailItem key={item.to} item={item} active={item.match(pathname)} />
       ))}

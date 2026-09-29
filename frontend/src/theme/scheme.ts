@@ -1,7 +1,8 @@
 import { Hct, SchemeContent, argbFromHex, hexFromArgb } from "@material/material-color-utilities";
 
-/** The single seed the whole scheme is generated from (PLAN.md §0, "Spruce"). */
-export const SEED = "#1E6A5E";
+/** The single seed the whole scheme is generated from (the LiverX brand's
+ * Bright Cyan Blue, docs/brand/liverx-brand-guideline.pdf). */
+export const SEED = "#00A4D8";
 
 export type Contrast = 0 | 0.5 | 1;
 

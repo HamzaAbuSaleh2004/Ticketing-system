@@ -57,13 +57,17 @@ export async function fontsReady(page: Page) {
   const loaded = await page.evaluate(() =>
     [...document.fonts].filter((f) => f.status === "loaded").map((f) => f.family),
   );
-  expect(loaded.join(",")).toContain("Roboto Flex Variable");
+  expect(loaded.join(",")).toContain("IBM Plex Sans");
 }
 
-export async function shot(page: Page, phase: string, name: string) {
-  await fontsReady(page);
-  // Capture the settled state, not a frame of an entrance, snackbar or
-  // theme-switch transition (two frames first, so just-triggered ones exist).
+/** Waits out the settled state, not a frame of an entrance, snackbar or
+ * theme-switch transition (two frames first, so just-triggered ones exist).
+ * Anything sampling computed styles or colours — a screenshot, an axe scan —
+ * should wait for this first, or it can catch a mid-transition frame that
+ * never actually appears to a person (a CSS `transition` on `background-color`
+ * or `color`, e.g. after `emulateMedia`, interpolates through combinations
+ * neither endpoint uses). */
+export async function settled(page: Page) {
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   // Infinite ones (spinners, skeleton pulse) never finish, so only finite ones count.
   await page.waitForFunction(() =>
@@ -72,5 +76,10 @@ export async function shot(page: Page, phase: string, name: string) {
       .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
       .every((a) => a.playState !== "running"),
   );
+}
+
+export async function shot(page: Page, phase: string, name: string) {
+  await fontsReady(page);
+  await settled(page);
   await page.screenshot({ path: path.join(SHOTS, phase, `${name}.png`), fullPage: true });
 }
