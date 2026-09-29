@@ -10,7 +10,7 @@ from app import models  # noqa: F401 -- registers models on Base.metadata
 from app.config import get_settings
 from app.db import SessionLocal
 from app.domain import clock
-from app.services.sweeps import auto_close_sweep, sla_risk_sweep
+from app.services.sweeps import auto_close_sweep, prune_login_attempts, sla_risk_sweep
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,6 +21,7 @@ async def run_sweeps_once(now: datetime) -> None:
     sweeps = {
         "sla-risk": partial(sla_risk_sweep, now=now),
         "auto-close": partial(auto_close_sweep, now=now, cooloff_hours=cooloff_hours),
+        "prune-login-attempts": partial(prune_login_attempts, now=now),
     }
     for name, sweep in sweeps.items():
         # Separate sessions: one sweep failing doesn't roll back the other.

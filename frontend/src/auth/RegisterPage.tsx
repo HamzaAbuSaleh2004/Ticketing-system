@@ -1,6 +1,7 @@
 import { Alert, Box, Button, Link, Stack, TextField, Typography } from "@mui/material";
 import { useState, type FormEvent } from "react";
 import { Link as RouterLink, Navigate, useNavigate } from "react-router-dom";
+import { useAuthConfig } from "../api/hooks";
 import { ApiError, errorMessage } from "../api/client";
 import type { MfaChallenge } from "../api/types";
 import { sys } from "../theme/scheme";
@@ -13,6 +14,7 @@ const MIN_PASSWORD = 8;
 export function RegisterPage() {
   const { user, register } = useAuth();
   const navigate = useNavigate();
+  const authConfig = useAuthConfig();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,6 +24,15 @@ export function RegisterPage() {
   const [challenge, setChallenge] = useState<MfaChallenge | null>(null);
 
   if (user) return <Navigate to={homeFor(user.role)} replace />;
+  if (authConfig.data?.allow_registration === false) {
+    return (
+      <AuthLayout title="Registration is closed" intro="Ask an admin to create your account, then sign in below.">
+        <Button component={RouterLink} to="/login" variant="contained" size="large">
+          Go to sign in
+        </Button>
+      </AuthLayout>
+    );
+  }
   if (challenge) {
     return (
       <TwoStep

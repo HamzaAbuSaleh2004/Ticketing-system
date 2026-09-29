@@ -93,6 +93,27 @@ cd frontend && npx playwright install chromium && npx playwright test   # end-to
 
 File watching in the containers uses polling (`VITE_USE_POLLING`, `WATCHFILES_FORCE_POLLING`), because Docker Desktop bind mounts don't deliver file-change events.
 
+## Creating the first admin
+
+`create_admin` creates a real admin account (or promotes an existing one), outside the seeded demo accounts. Local:
+
+```
+docker compose exec api python -m app.create_admin --email habusaleh@liverx.me --name "Hamza Abu Saleh"
+```
+
+It prompts for the password twice (hidden input) and applies the same validator as `/auth/register`. It never sets up two-step verification — the account enrols an authenticator at its first sign-in, the same as every other account. It's idempotent: running it again for the same email either says it's already an admin, or promotes it if it wasn't one yet. It refuses an email outside `STAFF_EMAIL_DOMAINS` (below), and works with `ENV=prod`.
+
+On Cloud Run, this runs as a one-off job against the deployed database instead (Phase 16).
+
+## Production hardening
+
+- **Staff email domains.** `STAFF_EMAIL_DOMAINS` (default `liverx.me`, comma-separated) gates who can be promoted to `agent`/`admin`, via `PATCH /users/{id}` or `create_admin`. Locally (`ENV=local`), `@ticketing.demo` is also allowed, for the seeded demo staff — never in `test` or `prod`.
+- **Registration switch.** `ALLOW_REGISTRATION` (default `true`). Set it to `false` to close public sign-up; `POST /auth/register` then returns 403, and the frontend hides "Create account" (`GET /auth/config` is the public source of truth both check).
+- **Sign-in throttling.** 10 failed `POST /auth/login` attempts for one email, or from one client IP, in a 15-minute window returns 429 for the rest of that window. Attempts are stored in `login_attempts` (not in memory, since Cloud Run runs several instances) and pruned after a day by the worker's sweep. `TRUST_PROXY=true` reads the real client IP from the first hop of `X-Forwarded-For` (set this only behind something that sets that header itself, like Cloud Run — otherwise a client could claim any IP).
+- **CORS.** `CORS_ORIGINS` (comma-separated, default `http://localhost:5173`). Empty in prod, where the SPA is served same-origin.
+- **Security headers.** Every response carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `X-Frame-Options: DENY` and a `Content-Security-Policy` (self, plus `data:` for the QR code image and the self-hosted variable fonts, plus `'unsafe-inline'` styles for MUI/emotion's runtime style injection). Verified against the real `frontend/dist` build served locally with these exact headers, not just assumed.
+- `ENV=prod` refuses to start with a default/short `JWT_SECRET`, or with `SEED_DEMO` explicitly on.
+
 ## Moving to Google Cloud (iteration 2)
 
 These are seams only; nothing is deployed in this iteration.

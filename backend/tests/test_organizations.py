@@ -121,7 +121,7 @@ async def test_admin_can_clear_an_end_users_organization(client, db_session):
 async def test_promoting_an_end_user_clears_their_organization(client, db_session):
     admin_token = await _admin_token(client, db_session)
     org = await _org(db_session)
-    end_user = await create_user(db_session, email="promotee@example.com", role=UserRole.end_user, organization_id=org.id)
+    end_user = await create_user(db_session, email="promotee@ticketing.demo", role=UserRole.end_user, organization_id=org.id)
     promoted = await client.patch(f"/users/{end_user.id}", json={"role": "agent"}, headers=auth(admin_token))
     assert (promoted.json()["role"], promoted.json()["organization_id"]) == ("agent", None)
 

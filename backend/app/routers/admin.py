@@ -11,8 +11,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_role
+from app.config import get_settings
 from app.db import get_db
 from app.domain.audit import write_audit
+from app.domain.staff import is_allowed_staff_email
 from app.models import AuditLog, Category, Organization, SlaPolicy, Ticket, User
 from app.models.enums import Team, TicketPriority, UserRole
 from app.schemas.category import CategoryOut
@@ -141,6 +143,15 @@ async def patch_user(
     if target.id == admin.id and "role" in changes and changes["role"] != target.role:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="You can't change your own role")
     staff_roles = (UserRole.agent, UserRole.admin)
+    if (
+        changes.get("role") in staff_roles
+        and target.role not in staff_roles
+        and not is_allowed_staff_email(target.email, get_settings())
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Staff accounts need an address on {', '.join(get_settings().staff_email_domains)}",
+        )
     if target.role in staff_roles and changes.get("role", target.role) not in staff_roles:
         open_count = await session.scalar(
             select(func.count()).select_from(Ticket).where(

@@ -42,19 +42,44 @@ class Settings(BaseSettings):
     SEED_DEMO: bool | None = None
     DEMO_DATA_PATH: str = "/demo-data/tickets.json"
 
+    # Phase 13: admin bootstrap & production hardening
+    STAFF_EMAIL_DOMAINS: str = "liverx.me"
+    ALLOW_REGISTRATION: bool = True
+    LOGIN_MAX_FAILED_ATTEMPTS: int = 10
+    LOGIN_ATTEMPT_WINDOW_MINUTES: int = 15
+    # Only the first hop of X-Forwarded-For is trusted, and only when this is
+    # set — Cloud Run terminates TLS and sets it itself; a bare uvicorn behind
+    # nothing must not trust a client-supplied header for its own IP.
+    TRUST_PROXY: bool = False
+    # Comma-separated; empty in prod, where the SPA is served same-origin
+    # (Phase 15) and needs no CORS headers at all.
+    CORS_ORIGINS: str = "http://localhost:5173"
+
     def check_prod_safe(self) -> None:
         """Phase 3 follow-up: refuse to start in prod with a weak/default
-        JWT secret. Local and test behaviour is unaffected."""
+        JWT secret. Phase 13 follow-up: also refuse ENV=prod with SEED_DEMO
+        explicitly on, which would create the published-password demo
+        accounts in a real deployment. Local and test behaviour is unaffected."""
         if self.ENV != "prod":
             return
         if self.JWT_SECRET == Settings.model_fields["JWT_SECRET"].default or len(self.JWT_SECRET) < 32:
             raise RuntimeError(
                 "JWT_SECRET must be set to a random value of at least 32 bytes when ENV=prod"
             )
+        if self.seed_demo:
+            raise RuntimeError("SEED_DEMO must not be enabled when ENV=prod")
 
     @property
     def seed_demo(self) -> bool:
         return self.ENV == "local" if self.SEED_DEMO is None else self.SEED_DEMO
+
+    @property
+    def staff_email_domains(self) -> list[str]:
+        return [d.strip().lower() for d in self.STAFF_EMAIL_DOMAINS.split(",") if d.strip()]
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
 
 @lru_cache

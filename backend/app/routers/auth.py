@@ -4,8 +4,8 @@ an access token. First sign-in enrols an authenticator app."""
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,11 +22,11 @@ from app.auth.tokens import (
     create_mfa_token,
     decode_mfa_token,
 )
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.db import get_db
 from app.domain import clock
 from app.domain.audit import write_audit
-from app.models import User
+from app.models import LoginAttempt, User
 from app.models.enums import UserRole
 from app.schemas.auth import (
     LoginRequest,
@@ -106,8 +106,55 @@ def _accept_code(user: User, step: int | None = None) -> None:
         user.totp_last_step = step
 
 
+def _client_ip(request: Request, settings: Settings) -> str:
+    """The first X-Forwarded-For hop, only when TRUST_PROXY says something
+    in front of us (Cloud Run) sets it — otherwise a client could just claim
+    to be any IP and dodge its own throttling."""
+    if settings.TRUST_PROXY:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+async def _lock_for_login_attempt(session: AsyncSession, *, email: str, ip: str) -> None:
+    """Serializes concurrent /auth/login attempts sharing an email or IP for
+    the rest of this transaction (released at commit/rollback), so a burst
+    of parallel requests can't all read the same pre-burst failure count
+    before any of their own attempts land — the classic check-then-insert
+    race a naive throttle has."""
+    await session.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"login-email:{email}"))))
+    await session.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"login-ip:{ip}"))))
+
+
+async def _too_many_recent_failures(session: AsyncSession, *, email: str, ip: str, settings: Settings) -> bool:
+    """Two independent limits — by email and by IP — either one enough to
+    block, so an attacker can't dodge one by spreading guesses across the
+    other axis. One query, not two: the counts don't depend on each other,
+    so filtered aggregates in a single round trip beat two sequential ones."""
+    since = clock.now() - timedelta(minutes=settings.LOGIN_ATTEMPT_WINDOW_MINUTES)
+    by_email, by_ip = (
+        await session.execute(
+            select(
+                func.count().filter(LoginAttempt.email == email),
+                func.count().filter(LoginAttempt.ip == ip),
+            ).where(LoginAttempt.created_at > since)
+        )
+    ).one()
+    return by_email >= settings.LOGIN_MAX_FAILED_ATTEMPTS or by_ip >= settings.LOGIN_MAX_FAILED_ATTEMPTS
+
+
+@router.get("/config")
+async def auth_config() -> dict:
+    """Public: the frontend uses this to hide "Create account" when
+    registration is switched off, without needing to sign in first."""
+    return {"allow_registration": get_settings().ALLOW_REGISTRATION}
+
+
 @router.post("/register", response_model=MfaChallenge, status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest, session: AsyncSession = Depends(get_db)) -> MfaChallenge:
+    if not get_settings().ALLOW_REGISTRATION:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Registration is closed. Ask an admin for an account.")
     # Public registration always creates an end_user; agent/admin accounts are
     # provisioned by an admin, never through this endpoint.
     user = User(
@@ -130,18 +177,41 @@ async def register(body: RegisterRequest, session: AsyncSession = Depends(get_db
 
 
 @router.post("/login", response_model=MfaChallenge)
-async def login(body: LoginRequest, session: AsyncSession = Depends(get_db)) -> MfaChallenge:
+async def login(body: LoginRequest, request: Request, session: AsyncSession = Depends(get_db)) -> MfaChallenge:
     invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
+    settings = get_settings()
+    ip = _client_ip(request, settings)
+
+    # Held for the rest of this transaction: makes the check-then-insert
+    # below race-free against concurrent attempts for this email or IP.
+    await _lock_for_login_attempt(session, email=body.email, ip=ip)
+
+    if await _too_many_recent_failures(session, email=body.email, ip=ip, settings=settings):
+        await session.commit()  # releases the advisory lock without holding the row lock idle
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many attempts. Wait {settings.LOGIN_ATTEMPT_WINDOW_MINUTES} minutes, then try again.",
+        )
+
+    async def _record_failure() -> None:
+        # Explicit clock.now(), not the column's server_default: tests freeze
+        # clock.now() to exercise the rate-limit window deterministically.
+        session.add(LoginAttempt(email=body.email, ip=ip, created_at=clock.now()))
+        await session.commit()
 
     # bcrypt raises ValueError past 72 bytes rather than just comparing
-    # wrong; no real password is this long, so reject without hashing.
+    # wrong; no real password is this long, so reject without hashing. Still
+    # recorded, so this path can't be used to dodge the throttle above.
     if password_exceeds_limit(body.password):
+        await _record_failure()
         raise invalid
 
     user = await session.scalar(select(User).where(User.email == body.email))
     password_ok = verify_password_timing_safe(body.password, user.password_hash if user else None)
     if user is None or not password_ok:
+        await _record_failure()
         raise invalid
+    await session.commit()  # releases the advisory lock
     return _challenge(user)
 
 

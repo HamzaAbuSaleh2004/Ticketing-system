@@ -1,6 +1,7 @@
 import { Alert, Box, Button, Link, Stack, TextField, Typography } from "@mui/material";
 import { useState, type FormEvent } from "react";
 import { Link as RouterLink, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useAuthConfig } from "../api/hooks";
 import { ApiError, errorMessage } from "../api/client";
 import type { MfaChallenge } from "../api/types";
 import { sys } from "../theme/scheme";
@@ -11,6 +12,8 @@ import { TwoStep } from "./TwoStep";
 export function LoginPage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
+  // Defaults to shown while loading, so it doesn't flash in then disappear.
+  const allowRegistration = useAuthConfig().data?.allow_registration ?? true;
   const from = (useLocation().state as { from?: string } | null)?.from;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -87,12 +90,14 @@ export function LoginPage() {
           <Button type="submit" variant="contained" size="large" disabled={busy} sx={{ alignSelf: "flex-start" }}>
             {busy ? "Signing in…" : "Sign in"}
           </Button>
-          <Typography variant="bodyMedium" sx={{ color: sys("onSurfaceVariant") }}>
-            New here?{" "}
-            <Link component={RouterLink} to="/register">
-              Create an account
-            </Link>
-          </Typography>
+          {allowRegistration ? (
+            <Typography variant="bodyMedium" sx={{ color: sys("onSurfaceVariant") }}>
+              New here?{" "}
+              <Link component={RouterLink} to="/register">
+                Create an account
+              </Link>
+            </Typography>
+          ) : null}
         </Stack>
       </Box>
     </AuthLayout>

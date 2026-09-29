@@ -106,8 +106,8 @@ async def test_analytics_summary_math_on_a_fixed_dataset(client, db_session, mon
 
 async def test_admin_edits_users_categories_and_sla_policies_all_audited(client, db_session):
     admin_token = await _admin(client, db_session)
-    agent = await create_agent(db_session, email="promote-me@example.com")
-    agent_token = await login(client, "promote-me@example.com")
+    agent = await create_agent(db_session, email="promote-me@ticketing.demo")
+    agent_token = await login(client, "promote-me@ticketing.demo")
     boss_id = (await client.get("/auth/me", headers=auth(admin_token))).json()["id"]
 
     # Users: role/team edits, team cleared for non-agents, no self-demotion.

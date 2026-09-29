@@ -25,6 +25,19 @@ def test_local_with_default_secret_starts():
     settings.check_prod_safe()
 
 
+def test_prod_with_seed_demo_refuses_to_start():
+    settings = Settings(ENV="prod", JWT_SECRET="x" * 32, SEED_DEMO=True)
+    with pytest.raises(RuntimeError):
+        settings.check_prod_safe()
+
+
+def test_prod_without_seed_demo_starts():
+    settings = Settings(ENV="prod", JWT_SECRET="x" * 32, SEED_DEMO=False)
+    settings.check_prod_safe()
+    # Unset entirely (the common case): defaults to off in prod, so it's fine.
+    Settings(ENV="prod", JWT_SECRET="x" * 32).check_prod_safe()
+
+
 async def test_seed_users_is_skipped_in_prod(db_session, monkeypatch):
     from sqlalchemy import func, select
 

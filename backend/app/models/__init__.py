@@ -11,6 +11,7 @@ from app.models.enums import (
     UserRole,
 )
 from app.models.kb_article import KnowledgeBaseArticle
+from app.models.login_attempt import LoginAttempt
 from app.models.organization import Organization
 from app.models.sla_policy import SlaPolicy
 from app.models.ticket import Ticket
@@ -23,6 +24,7 @@ __all__ = [
     "AuditLog",
     "Category",
     "KnowledgeBaseArticle",
+    "LoginAttempt",
     "Organization",
     "OrganizationKind",
     "SlaPolicy",

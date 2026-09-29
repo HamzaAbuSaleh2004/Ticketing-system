@@ -17,6 +17,7 @@ from app.routers.kb import router as kb_router
 from app.routers.organizations import router as organizations_router
 from app.routers.tickets import router as tickets_router
 from app.routers.users import router as users_router
+from app.security_headers import SecurityHeadersMiddleware
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,9 +28,10 @@ settings.check_prod_safe()
 app = FastAPI(title="Ticketing Portal API")
 
 app.add_middleware(BodySizeLimitMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -24,12 +24,22 @@ export const keys = {
   article: (slug: string) => ["kb-article", slug] as const,
   categories: ["categories"] as const,
   organizations: ["organizations"] as const,
+  authConfig: ["auth-config"] as const,
 };
 
 export function useOrganizations() {
   return useQuery({
     queryKey: keys.organizations,
     queryFn: () => api<Organization[]>("/organizations"),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Public: whether "Create account" should be offered at all. */
+export function useAuthConfig() {
+  return useQuery({
+    queryKey: keys.authConfig,
+    queryFn: () => api<{ allow_registration: boolean }>("/auth/config"),
     staleTime: 5 * 60_000,
   });
 }

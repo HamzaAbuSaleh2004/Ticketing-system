@@ -4,12 +4,12 @@ an agent's PATCH is holding is skipped this round rather than overwritten."""
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.audit import write_audit
 from app.domain.sla import is_at_risk
-from app.models import Ticket
+from app.models import LoginAttempt, Ticket
 from app.models.enums import TicketPriority, TicketStatus
 from app.services.tickets import escalate
 
@@ -125,3 +125,15 @@ async def auto_close_sweep(session: AsyncSession, now: datetime, *, cooloff_hour
         )
     await session.commit()
     return [t.id for t in tickets]
+
+
+async def prune_login_attempts(session: AsyncSession, now: datetime, *, older_than_days: int = 1) -> list[int]:
+    """Failed-login rows exist only to feed the rolling rate-limit window
+    (Phase 13), so nothing needs one past a day old."""
+    cutoff = now - timedelta(days=older_than_days)
+    result = await session.execute(
+        delete(LoginAttempt).where(LoginAttempt.created_at < cutoff).returning(LoginAttempt.id)
+    )
+    ids = [row[0] for row in result]
+    await session.commit()
+    return ids
