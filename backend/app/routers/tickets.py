@@ -119,6 +119,12 @@ def _is_agent(user: User) -> bool:
     return user.role in _AGENT_ROLES
 
 
+async def _require_active_organization(session: AsyncSession, organization_id: int) -> None:
+    org = await session.get(Organization, organization_id)
+    if org is None or not org.active:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown or inactive organisation")
+
+
 async def _get_ticket_or_404(
     session: AsyncSession, ticket_id: int, user: User, *, lock: bool = False
 ) -> Ticket:
@@ -198,13 +204,13 @@ async def _build_ticket_detail(
             .order_by(AuditLog.created_at, AuditLog.id)
         )
     ).all()
-    requester = await session.get(User, ticket.requester_id)
+    requester = await session.get(User, ticket.requester_id) if ticket.requester_id else None
     assignee = await session.get(User, ticket.assignee_id) if ticket.assignee_id else None
     return TicketDetail(
         **public.model_dump(),
         sla_paused_total_seconds=ticket.sla_paused_total_seconds,
-        requester_name=requester.name,
-        requester_email=requester.email,
+        requester_name=requester.name if requester else None,
+        requester_email=requester.email if requester else None,
         assignee_name=assignee.name if assignee else None,
         audit_log=[
             AuditLogOut.model_validate(row).model_copy(update={"actor_name": name})
@@ -245,13 +251,37 @@ async def create_ticket(
         now, response_minutes=policy.response_minutes, resolution_minutes=policy.resolution_minutes
     )
 
+    if _is_agent(user):
+        # On behalf of a customer: either claimed immediately (an existing
+        # end_user, organisation inherited from them) or unclaimed (no
+        # requester yet, so the organisation must be given directly).
+        requester_id = None
+        organization_id = body.organization_id
+        if body.requester_id is not None:
+            customer = await session.get(User, body.requester_id)
+            if customer is None or customer.role != UserRole.end_user:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="requester_id must be an existing customer")
+            requester_id = customer.id
+            organization_id = customer.organization_id
+        elif organization_id is not None:
+            await _require_active_organization(session, organization_id)
+        else:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Set requester_id (an existing customer) or organization_id (for one with no account yet)",
+            )
+    else:
+        # Self-service: always your own ticket, own organisation.
+        requester_id = user.id
+        organization_id = user.organization_id
+
     ticket = Ticket(
         subject=body.subject,
         description=body.description,
         status=TicketStatus.new,
         priority=TicketPriority.normal,
-        requester_id=user.id,
-        organization_id=user.organization_id,
+        requester_id=requester_id,
+        organization_id=organization_id,
         sla_response_due=response_due,
         sla_resolution_due=resolution_due,
         created_at=now,
@@ -357,7 +387,7 @@ async def list_tickets(
             func.coalesce(open_items.c.open_customer, 0),
             func.coalesce(open_items.c.open_liverx, 0),
         )
-        .join(requester, requester.id == Ticket.requester_id)
+        .outerjoin(requester, requester.id == Ticket.requester_id)
         .outerjoin(assignee, assignee.id == Ticket.assignee_id)
         .outerjoin(org, org.id == Ticket.organization_id)
         .outerjoin(open_items, open_items.c.ticket_id == Ticket.id)
@@ -470,12 +500,23 @@ async def patch_ticket(
     if "organization_id" in changes and changes["organization_id"] != ticket.organization_id:
         new_org_id = changes["organization_id"]
         if new_org_id is not None:
-            org = await session.get(Organization, new_org_id)
-            if org is None or not org.active:
-                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown or inactive organisation")
+            await _require_active_organization(session, new_org_id)
         before["organization_id"] = ticket.organization_id
         ticket.organization_id = new_org_id
         after["organization_id"] = ticket.organization_id
+
+    if "requester_id" in changes and changes["requester_id"] != ticket.requester_id:
+        new_requester_id = changes["requester_id"]
+        if ticket.requester_id is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="This ticket already has a requester")
+        if new_requester_id is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="requester_id can't be cleared")
+        customer = await session.get(User, new_requester_id)
+        if customer is None or customer.role != UserRole.end_user:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="requester_id must be an existing customer")
+        before["requester_id"] = ticket.requester_id
+        ticket.requester_id = new_requester_id
+        after["requester_id"] = ticket.requester_id
 
     if "assignee_id" in changes and changes["assignee_id"] != ticket.assignee_id:
         new_assignee_id = changes["assignee_id"]

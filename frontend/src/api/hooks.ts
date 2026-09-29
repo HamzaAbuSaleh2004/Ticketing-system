@@ -4,6 +4,7 @@ import type {
   ActionItem,
   ActionItemSide,
   Attachment,
+  CustomerSearchResult,
   TicketDetail,
   TicketPatch,
   TicketQueue,
@@ -140,6 +141,30 @@ export function useQueue(query: string) {
 
 export function useStaff() {
   return useQuery({ queryKey: ["staff"], queryFn: () => api<User[]>("/users/staff"), staleTime: 5 * 60_000 });
+}
+
+/** The "create/claim a ticket for this customer" picker's data source. */
+export function useCustomerSearch(q: string) {
+  return useQuery({
+    queryKey: ["customers", q],
+    queryFn: () => api<CustomerSearchResult[]>(`/users/customers?q=${encodeURIComponent(q)}`),
+    enabled: q.trim().length >= MIN_QUERY,
+    staleTime: 30_000,
+  });
+}
+
+/** The agent console's "New ticket" form: on behalf of an existing customer
+ * (requester_id) or, when they have no account yet, just an organisation. */
+export function useCreateTicketForCustomer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { subject: string; description: string; requester_id?: number; organization_id?: number }) =>
+      api<TicketDetail>("/tickets", { method: "POST", body }),
+    onSuccess: (ticket) => {
+      qc.setQueryData(keys.ticket(ticket.id), ticket);
+      qc.invalidateQueries({ queryKey: keys.tickets, exact: true });
+    },
+  });
 }
 
 export function useAgentTicket(id: number) {

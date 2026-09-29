@@ -33,7 +33,10 @@ class Ticket(Base):
         ForeignKey("organizations.id"), nullable=True, index=True
     )
 
-    requester_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    # Phase 14 addition: nullable — an "unclaimed" ticket (staff-created for a
+    # customer with no account yet) has no requester until one links it to a
+    # real end_user account. Always non-null for a customer's own ticket.
+    requester_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
 
     sla_response_due: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

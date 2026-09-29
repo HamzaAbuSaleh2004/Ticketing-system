@@ -10,6 +10,7 @@ import { SlaIndicator } from "../../components/SlaIndicator";
 import { absoluteTime, ticketRef } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
 import { Composer, AgentThread } from "./AgentThread";
+import { ClaimCustomer } from "./ClaimCustomer";
 import { apiQuery, readFilters } from "./queueParams";
 import { TicketSidePanel } from "./TicketSidePanel";
 import { useListKeys } from "./useListKeys";
@@ -156,17 +157,23 @@ export function AgentTicketPage() {
               {ticket.organization_kind ? <OrganizationKindChip kind={ticket.organization_kind} /> : null}
             </Stack>
           ) : null}
-          <Typography variant="bodySmall" sx={{ color: sys("onSurfaceVariant") }}>
-            Opened by {ticket.requester_name}, {ticket.requester_email}. Opened {absoluteTime(ticket.created_at)}
-            {ticket.parent_ticket_id ? (
-              <>
-                {". Follow-up to "}
-                <Link component={RouterLink} to={`/agent/tickets/${ticket.parent_ticket_id}${search}`} className="tabular">
-                  {ticketRef(ticket.parent_ticket_id)}
-                </Link>
-              </>
-            ) : null}
-          </Typography>
+          {ticket.requester_name ? (
+            <Typography variant="bodySmall" sx={{ color: sys("onSurfaceVariant") }}>
+              Opened by {ticket.requester_name}, {ticket.requester_email}. Opened {absoluteTime(ticket.created_at)}
+              {ticket.parent_ticket_id ? (
+                <>
+                  {". Follow-up to "}
+                  <Link component={RouterLink} to={`/agent/tickets/${ticket.parent_ticket_id}${search}`} className="tabular">
+                    {ticketRef(ticket.parent_ticket_id)}
+                  </Link>
+                </>
+              ) : null}
+            </Typography>
+          ) : (
+            <Box sx={{ mt: 0.5 }}>
+              <ClaimCustomer ticketId={ticket.id} onError={setToast} />
+            </Box>
+          )}
         </Box>
         <AgentThread ticket={ticket} />
         <Box sx={{ mt: "auto", pt: 1 }}>

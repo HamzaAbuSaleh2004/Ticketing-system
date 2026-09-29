@@ -5,18 +5,20 @@ import re
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_role
+from app.auth.security import hash_password
 from app.config import get_settings
 from app.db import get_db
 from app.domain.audit import write_audit
 from app.domain.staff import is_allowed_staff_email
 from app.models import AuditLog, Category, Organization, SlaPolicy, Ticket, User
 from app.models.enums import Team, TicketPriority, UserRole
+from app.schemas.auth import check_password_bytes, normalize_email
 from app.schemas.category import CategoryOut
 from app.services.tickets import ACTIVE_STATUSES
 
@@ -43,6 +45,28 @@ class UserPatch(BaseModel):
     role: UserRole | None = None
     team: Team | None = None
     organization_id: int | None = None
+
+
+class StaffCreate(BaseModel):
+    """Phase 14: a way to add a new admin/agent directly, so the first real
+    admin can hand off to a second one without that person first
+    registering a customer account to be promoted."""
+
+    email: EmailStr
+    name: str = Field(min_length=1, max_length=255)
+    role: UserRole
+    team: Team | None = None
+    password: str = Field(min_length=8)
+
+    _email = field_validator("email")(normalize_email)
+    _password = field_validator("password")(check_password_bytes)
+
+    @field_validator("role")
+    @classmethod
+    def _staff_role_only(cls, value: UserRole) -> UserRole:
+        if value not in (UserRole.agent, UserRole.admin):
+            raise ValueError("role must be agent or admin")
+        return value
 
 
 def _clean_name(value: str | None) -> str | None:
@@ -123,6 +147,37 @@ def _diff(obj, changes: dict) -> tuple[dict, dict]:
 async def list_users(user: User = Depends(_admin), session: AsyncSession = Depends(get_db)) -> list[AdminUserOut]:
     rows = await session.scalars(select(User).order_by(User.role, User.name))
     return [AdminUserOut.model_validate(u) for u in rows]
+
+
+@router.post("/users", response_model=AdminUserOut, status_code=status.HTTP_201_CREATED)
+async def create_staff(
+    body: StaffCreate, admin: User = Depends(_admin), session: AsyncSession = Depends(get_db)
+) -> AdminUserOut:
+    """Adds a new admin or agent directly — unlike promotion, the target
+    doesn't need an existing (customer) account first. Never sets up 2FA:
+    the new account enrols an authenticator at its own first sign-in."""
+    if not is_allowed_staff_email(body.email, get_settings()):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Staff accounts need an address on {', '.join(get_settings().staff_email_domains)}",
+        )
+    team = body.team if body.role == UserRole.agent else None
+    if body.role == UserRole.agent and team is None:
+        team = Team.tier1
+
+    user = User(email=body.email, name=body.name, role=body.role, team=team, password_hash=hash_password(body.password))
+    session.add(user)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Email already registered") from exc
+    await write_audit(
+        session, entity_type="user", entity_id=user.id, actor_id=admin.id,
+        action="user.created", diff={"after": {"email": user.email, "role": user.role.value}},
+    )
+    await session.commit()
+    return AdminUserOut.model_validate(user)
 
 
 @router.patch("/users/{user_id}", response_model=AdminUserOut)

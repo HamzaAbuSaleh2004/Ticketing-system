@@ -11,32 +11,30 @@ from app.models.enums import Team, UserRole
 MAX_PASSWORD_BYTES = 72
 
 
+def normalize_email(value: str) -> str:
+    return value.strip().lower()
+
+
+def check_password_bytes(value: str) -> str:
+    if len(value.encode("utf-8")) > MAX_PASSWORD_BYTES:
+        raise ValueError(f"Password must be at most {MAX_PASSWORD_BYTES} bytes")
+    return value
+
+
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     name: str = Field(min_length=1, max_length=255)
 
-    @field_validator("email")
-    @classmethod
-    def _normalize_email(cls, value: str) -> str:
-        return value.strip().lower()
-
-    @field_validator("password")
-    @classmethod
-    def _check_password_bytes(cls, value: str) -> str:
-        if len(value.encode("utf-8")) > MAX_PASSWORD_BYTES:
-            raise ValueError(f"Password must be at most {MAX_PASSWORD_BYTES} bytes")
-        return value
+    _email = field_validator("email")(normalize_email)
+    _password = field_validator("password")(check_password_bytes)
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
-    @field_validator("email")
-    @classmethod
-    def _normalize_email(cls, value: str) -> str:
-        return value.strip().lower()
+    _email = field_validator("email")(normalize_email)
 
 
 class UserOut(BaseModel):

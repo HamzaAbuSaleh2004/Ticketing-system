@@ -8,6 +8,7 @@ import { AdminPage } from "./portals/admin/AdminPage";
 import { AgentShell } from "./portals/agent/AgentShell";
 import { DashboardPage } from "./portals/agent/dashboard/DashboardPage";
 import { AgentTicketPage } from "./portals/agent/AgentTicketPage";
+import { NewTicketPage } from "./portals/agent/NewTicketPage";
 import { QueuePage } from "./portals/agent/QueuePage";
 import { ArticlePage } from "./portals/enduser/ArticlePage";
 import { EndUserShell } from "./portals/enduser/EndUserShell";
@@ -66,6 +67,7 @@ const routes: RouteObject[] = [
     ),
     children: [
       { path: "/agent", element: <QueuePage /> },
+      { path: "/agent/tickets/new", element: <NewTicketPage /> },
       { path: "/agent/tickets/:id", element: <AgentTicketRoute /> },
       { path: "/agent/dashboard", element: <DashboardPage /> },
       {

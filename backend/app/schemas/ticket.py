@@ -13,6 +13,12 @@ from app.models.enums import (
 class TicketCreate(BaseModel):
     subject: str = Field(min_length=1, max_length=255)
     description: str = Field(min_length=1)
+    # Agent/admin only: create the ticket already claimed for an existing
+    # customer (organisation inherited from them), or — when omitted —
+    # unclaimed and tagged with this organisation directly. An end_user
+    # caller can't set either; the router forces requester=self, own org.
+    requester_id: int | None = None
+    organization_id: int | None = None
 
 
 class TicketPatch(BaseModel):
@@ -25,6 +31,9 @@ class TicketPatch(BaseModel):
     priority: TicketPriority | None = None
     category: str | None = None
     organization_id: int | None = None
+    # Agent/admin only: claims an unclaimed ticket for an existing customer.
+    # Only settable once (409 if the ticket already has a requester).
+    requester_id: int | None = None
     escalate: bool | None = None
 
 
@@ -118,7 +127,7 @@ class TicketListItem(BaseModel):
     status: TicketStatus
     priority: TicketPriority
     category: str | None
-    requester_id: int
+    requester_id: int | None
     assignee_id: int | None
     escalated: bool
     sla_response_due: datetime | None
@@ -145,7 +154,8 @@ class TicketQueueItem(TicketListItem):
     """Agent queue row: adds who's involved and the SLA clock inputs (pause
     accounting is agent-only, like on the detail)."""
 
-    requester_name: str
+    # None for an unclaimed ticket (no requester yet).
+    requester_name: str | None
     assignee_name: str | None
     sla_paused_at: datetime | None
     first_responded_at: datetime | None
@@ -182,8 +192,9 @@ class TicketDetail(TicketDetailPublic):
     payload can never validate as this model."""
 
     sla_paused_total_seconds: int
-    requester_name: str
-    requester_email: str
+    # Both None for an unclaimed ticket (no requester yet).
+    requester_name: str | None
+    requester_email: str | None
     assignee_name: str | None
     audit_log: list[AuditLogOut]
     # Legal next statuses from the current one (domain/lifecycle.py), so the

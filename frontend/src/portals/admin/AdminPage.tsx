@@ -6,6 +6,7 @@ import { api, errorMessage } from "../../api/client";
 import { useOrganizations } from "../../api/hooks";
 import type { Category, Organization, OrganizationKind, Role, Team, TicketPriority, User } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
+import { MIN_PASSWORD } from "../../auth/RegisterPage";
 import { PRIORITY_SHORT, absoluteTime, relativeTime } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
 
@@ -58,6 +59,96 @@ function useSave(onDone: (msg: string) => void, keys: string[][]) {
   });
 }
 
+function AddStaffDialog({ open, onClose, notify }: { open: boolean; onClose: () => void; notify: (m: string) => void }) {
+  const save = useSave(notify, [["admin", "users"], ["staff"]]);
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [role, setRole] = useState<"agent" | "admin">("agent");
+  const [team, setTeam] = useState<Team>("tier1");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  const passwordTooShort = submitted && password.length < MIN_PASSWORD;
+  const passwordMismatch = submitted && !passwordTooShort && password !== confirm;
+
+  function reset() {
+    setEmail("");
+    setName("");
+    setRole("agent");
+    setTeam("tier1");
+    setPassword("");
+    setConfirm("");
+    setSubmitted(false);
+  }
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    setSubmitted(true);
+    if (!email.trim() || !name.trim() || password.length < MIN_PASSWORD || password !== confirm) return;
+    save.mutate(
+      {
+        path: "/users",
+        method: "POST",
+        body: { email: email.trim(), name: name.trim(), role, team: role === "agent" ? team : undefined, password },
+        msg: `${name.trim()} added as ${ROLE_LABEL[role].toLowerCase()}`,
+      },
+      { onSuccess: () => { reset(); onClose(); } },
+    );
+  }
+
+  return (
+    <Dialog open={open} onClose={() => { reset(); onClose(); }} aria-labelledby="add-staff-title">
+      <Box component="form" onSubmit={submit} noValidate>
+        <DialogTitle id="add-staff-title">Add admin or agent</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2.5} sx={{ mt: 0.5, minWidth: 320 }}>
+            <TextField
+              label="Name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus fullWidth
+              error={submitted && !name.trim()} helperText={submitted && !name.trim() ? "Enter a name" : undefined}
+            />
+            <TextField
+              label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required fullWidth
+              error={submitted && !email.trim()}
+              helperText={submitted && !email.trim() ? "Enter their work email" : "Must be on an allowed staff domain"}
+            />
+            <TextField select label="Role" value={role} onChange={(e) => setRole(e.target.value as "agent" | "admin")} fullWidth>
+              <MenuItem value="agent">Agent</MenuItem>
+              <MenuItem value="admin">Admin</MenuItem>
+            </TextField>
+            {role === "agent" ? (
+              <TextField select label="Team" value={team} onChange={(e) => setTeam(e.target.value as Team)} fullWidth>
+                {(Object.keys(TEAM_LABEL) as Team[]).map((t) => (
+                  <MenuItem key={t} value={t}>
+                    {TEAM_LABEL[t]}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : null}
+            <TextField
+              label="Password" type="password" autoComplete="new-password" value={password}
+              onChange={(e) => setPassword(e.target.value)} required fullWidth
+              error={passwordTooShort}
+              helperText={passwordTooShort ? `At least ${MIN_PASSWORD} characters` : "They'll set up two-step verification at their first sign-in"}
+            />
+            <TextField
+              label="Confirm password" type="password" autoComplete="new-password" value={confirm}
+              onChange={(e) => setConfirm(e.target.value)} required fullWidth
+              error={passwordMismatch} helperText={passwordMismatch ? "Passwords don't match" : undefined}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { reset(); onClose(); }}>Cancel</Button>
+          <Button type="submit" variant="contained" disabled={save.isPending}>
+            {save.isPending ? "Adding…" : "Add"}
+          </Button>
+        </DialogActions>
+      </Box>
+    </Dialog>
+  );
+}
+
 function UsersTab({ notify }: { notify: (m: string) => void }) {
   const { user: me } = useAuth();
   const users = useQuery({ queryKey: ["admin", "users"], queryFn: () => api<AdminUser[]>("/users") });
@@ -65,9 +156,15 @@ function UsersTab({ notify }: { notify: (m: string) => void }) {
   const save = useSave(notify, [["admin", "users"], ["staff"]]);
   const patch = (u: User, body: Partial<AdminUser>, msg: string) => save.mutate({ path: `/users/${u.id}`, method: "PATCH", body, msg });
   const [resetting, setResetting] = useState<AdminUser | null>(null);
+  const [addingStaff, setAddingStaff] = useState(false);
 
   return (
     <QueryState query={users}>
+    <Box sx={{ mb: 1.5 }}>
+      <Button variant="tonal" size="small" onClick={() => setAddingStaff(true)}>
+        Add admin or agent
+      </Button>
+    </Box>
     <Table size="small" aria-label="Users">
       <TableHead>
         <TableRow>
@@ -207,6 +304,7 @@ function UsersTab({ notify }: { notify: (m: string) => void }) {
         </Button>
       </DialogActions>
     </Dialog>
+    <AddStaffDialog open={addingStaff} onClose={() => setAddingStaff(false)} notify={notify} />
     </QueryState>
   );
 }

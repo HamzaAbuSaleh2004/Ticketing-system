@@ -115,7 +115,9 @@ export function Composer({
             ? "Only agents see internal notes."
             : locked
               ? "Closed: the customer's next reply starts a follow-up."
-              : `Visible to ${ticket.requester_name}.`}
+              : ticket.requester_name
+                ? `Visible to ${ticket.requester_name}.`
+                : "No customer linked yet: they won't see this until one is."}
         </Typography>
       </Stack>
       {reply.isError ? (
@@ -148,7 +150,13 @@ export function Composer({
 export function AgentThread({ ticket }: { ticket: TicketDetail }) {
   return (
     <Box component="ol" aria-label="Conversation" sx={{ listStyle: "none", p: 0, m: 0, display: "grid", gap: 1 }}>
-      <Message author={ticket.requester_name} role="Customer" at={ticket.created_at} body={ticket.description} internal={false} />
+      <Message
+        author={ticket.requester_name ?? "No customer linked yet"}
+        role="Customer"
+        at={ticket.created_at}
+        body={ticket.description}
+        internal={false}
+      />
       {ticket.comments.map((c) => (
         <Message key={c.id} author={c.author_name} role={roleLabel(c)} at={c.created_at} body={c.body} internal={c.is_internal_note} />
       ))}

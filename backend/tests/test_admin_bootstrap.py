@@ -235,6 +235,85 @@ async def test_prune_login_attempts_removes_only_stale_rows(db_session, monkeypa
     assert [r.email for r in remaining] == ["fresh@example.com"]
 
 
+# --- admin-created staff accounts --------------------------------------------
+
+
+async def test_admin_creates_a_new_agent_and_it_can_sign_in(client, db_session):
+    admin_token = await _admin_token(client, db_session)
+    resp = await client.post(
+        "/users",
+        json={"email": "new-hire@liverx.me", "name": "New Hire", "role": "agent", "password": "Password123!"},
+        headers=auth(admin_token),
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert (body["role"], body["team"]) == ("agent", "tier1")
+
+    # A real account: signs in (starts its own enrolment, like anyone else).
+    login_step = await client.post("/auth/login", json={"email": "new-hire@liverx.me", "password": "Password123!"})
+    assert login_step.status_code == 200
+    assert login_step.json()["mfa"] == "enroll"
+
+    listed = await client.get("/users", headers=auth(admin_token))
+    assert any(u["email"] == "new-hire@liverx.me" and u["role"] == "agent" for u in listed.json())
+
+
+async def test_admin_creates_a_new_admin(client, db_session):
+    admin_token = await _admin_token(client, db_session)
+    resp = await client.post(
+        "/users",
+        json={"email": "manager@liverx.me", "name": "The Manager", "role": "admin", "password": "Password123!"},
+        headers=auth(admin_token),
+    )
+    assert resp.status_code == 201
+    assert resp.json()["role"] == "admin"
+
+
+async def test_create_staff_rejects_a_non_staff_domain(client, db_session):
+    admin_token = await _admin_token(client, db_session)
+    resp = await client.post(
+        "/users",
+        json={"email": "someone@gmail.com", "name": "Someone", "role": "agent", "password": "Password123!"},
+        headers=auth(admin_token),
+    )
+    assert resp.status_code == 422
+
+
+async def test_create_staff_rejects_end_user_role_and_duplicate_email(client, db_session):
+    admin_token = await _admin_token(client, db_session)
+    bad_role = await client.post(
+        "/users",
+        json={"email": "customer@liverx.me", "name": "Nope", "role": "end_user", "password": "Password123!"},
+        headers=auth(admin_token),
+    )
+    assert bad_role.status_code == 422
+
+    first = await client.post(
+        "/users",
+        json={"email": "dup@liverx.me", "name": "First", "role": "agent", "password": "Password123!"},
+        headers=auth(admin_token),
+    )
+    assert first.status_code == 201
+    dup = await client.post(
+        "/users",
+        json={"email": "dup@liverx.me", "name": "Second", "role": "agent", "password": "Password123!"},
+        headers=auth(admin_token),
+    )
+    assert dup.status_code == 409
+
+
+async def test_create_staff_requires_admin(client, db_session):
+    agent = await create_user(db_session, email="just-an-agent@liverx.me", role=UserRole.agent)
+    agent_token = await login(client, "just-an-agent@liverx.me")
+    resp = await client.post(
+        "/users",
+        json={"email": "sneaky@liverx.me", "name": "Sneaky", "role": "admin", "password": "Password123!"},
+        headers=auth(agent_token),
+    )
+    assert resp.status_code == 403
+    assert agent.role is UserRole.agent
+
+
 # --- security headers ---------------------------------------------------------
 
 

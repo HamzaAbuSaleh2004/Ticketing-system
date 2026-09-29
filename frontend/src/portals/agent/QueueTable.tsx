@@ -103,7 +103,9 @@ export function QueueTable({
                 <TableCell sx={{ ...cell, color: t.organization_name ? sys("onSurface") : sys("onSurfaceVariant") }}>
                   {t.organization_name ?? "None"}
                 </TableCell>
-                <TableCell sx={cell}>{t.requester_name}</TableCell>
+                <TableCell sx={{ ...cell, color: t.requester_name ? sys("onSurface") : sys("onSurfaceVariant") }}>
+                  {t.requester_name ?? "No customer yet"}
+                </TableCell>
                 <TableCell sx={cell}>
                   <PriorityChip priority={t.priority} />
                 </TableCell>

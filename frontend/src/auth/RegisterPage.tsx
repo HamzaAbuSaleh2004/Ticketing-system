@@ -9,7 +9,7 @@ import { homeFor, useAuth } from "./AuthContext";
 import { AuthLayout } from "./AuthLayout";
 import { TwoStep } from "./TwoStep";
 
-const MIN_PASSWORD = 8;
+export const MIN_PASSWORD = 8;
 
 export function RegisterPage() {
   const { user, register } = useAuth();

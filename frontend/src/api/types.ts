@@ -47,7 +47,8 @@ export type TicketListItem = {
   status: TicketStatus;
   priority: TicketPriority;
   category: string | null;
-  requester_id: number;
+  // null: "unclaimed" (staff-created for a customer with no account yet).
+  requester_id: number | null;
   assignee_id: number | null;
   escalated: boolean;
   sla_response_due: string | null;
@@ -96,7 +97,7 @@ export type TicketDetailPublic = TicketListItem & {
 };
 
 export type TicketQueueItem = TicketListItem & {
-  requester_name: string;
+  requester_name: string | null;
   assignee_name: string | null;
   sla_paused_at: string | null;
   first_responded_at: string | null;
@@ -116,8 +117,8 @@ export type AuditEntry = {
 
 export type TicketDetail = TicketDetailPublic & {
   sla_paused_total_seconds: number;
-  requester_name: string;
-  requester_email: string;
+  requester_name: string | null;
+  requester_email: string | null;
   assignee_name: string | null;
   audit_log: AuditEntry[];
   allowed_transitions: TicketStatus[];
@@ -129,8 +130,17 @@ export type TicketPatch = Partial<{
   priority: TicketPriority;
   category: string | null;
   organization_id: number | null;
+  requester_id: number;
   escalate: boolean;
 }>;
+
+export type CustomerSearchResult = {
+  id: number;
+  name: string;
+  email: string;
+  organization_id: number | null;
+  organization_name: string | null;
+};
 
 export type CommentCreateResult = { comment: Comment | null; follow_up_ticket_id: number | null };
 

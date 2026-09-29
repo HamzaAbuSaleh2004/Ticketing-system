@@ -1,6 +1,8 @@
+import AddOutlined from "@mui/icons-material/AddOutlined";
 import SearchOutlined from "@mui/icons-material/SearchOutlined";
-import { Box, InputAdornment, Stack, TextField, Typography } from "@mui/material";
+import { Box, Button, InputAdornment, Stack, TextField, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
+import { Link as RouterLink } from "react-router-dom";
 import { useCategories, useOrganizations, useStaff } from "../../api/hooks";
 import type { TicketPriority, TicketStatus } from "../../api/types";
 import { STATUS_LABEL } from "../../lib/tickets";
@@ -67,6 +69,9 @@ export function QueueToolbar({
             }}
           />
         </Box>
+        <Button component={RouterLink} to="/agent/tickets/new" startIcon={<AddOutlined />} variant="tonal">
+          New ticket
+        </Button>
       </Stack>
       <Stack direction="row" sx={{ gap: 1, flexWrap: "wrap" }} role="group" aria-label="Filters">
         <FilterChip
