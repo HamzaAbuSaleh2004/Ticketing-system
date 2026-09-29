@@ -1,15 +1,13 @@
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import current_user
-from app.config import get_settings
 from app.db import get_db
 from app.models import Attachment, Ticket, TicketComment, User
 from app.models.enums import UserRole
+from app.storage import Storage, get_storage
 
 router = APIRouter(prefix="/attachments", tags=["attachments"])
 
@@ -19,7 +17,8 @@ async def download_attachment(
     attachment_id: int,
     user: User = Depends(current_user),
     session: AsyncSession = Depends(get_db),
-) -> FileResponse:
+    storage: Storage = Depends(get_storage),
+) -> Response:
     row = (
         await session.execute(
             select(Attachment, Ticket.requester_id, TicketComment.is_internal_note)
@@ -37,14 +36,21 @@ async def download_attachment(
     if user.role == UserRole.end_user and (requester_id != user.id or is_internal_note):
         raise not_found
 
-    path = Path(attachment.file_path).resolve()
-    if not path.is_relative_to(Path(get_settings().ATTACHMENTS_DIR).resolve()) or not path.is_file():
-        raise not_found
-    # FileResponse with a filename sends Content-Disposition: attachment, so
-    # the browser downloads instead of rendering (no inline HTML/PDF from us).
-    return FileResponse(
-        path,
+    try:
+        data = await storage.open(attachment.file_path)
+    except FileNotFoundError:
+        raise not_found from None
+
+    # A hand-set Content-Disposition (not FileResponse, since GCS has no local
+    # path to hand it): the filename was already sanitised to a bare name at
+    # upload time (no path separators), and quotes are stripped so they can't
+    # break out of the quoted-string header value.
+    safe_filename = attachment.filename.replace('"', "")
+    return Response(
+        content=data,
         media_type=attachment.content_type,
-        filename=attachment.filename,
-        headers={"X-Content-Type-Options": "nosniff"},
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_filename}"',
+            "X-Content-Type-Options": "nosniff",
+        },
     )

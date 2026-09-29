@@ -16,7 +16,10 @@ def test_prod_with_short_secret_refuses_to_start():
 
 
 def test_prod_with_strong_secret_starts():
-    settings = Settings(ENV="prod", JWT_SECRET="x" * 32)
+    settings = Settings(
+        ENV="prod", JWT_SECRET="x" * 32,
+        SWEEP_AUDIENCE="https://helpdesk.example.com", SWEEP_INVOKER_EMAIL="sched@x.iam.gserviceaccount.com",
+    )
     settings.check_prod_safe()
 
 
@@ -31,11 +34,43 @@ def test_prod_with_seed_demo_refuses_to_start():
         settings.check_prod_safe()
 
 
+_PROD_SWEEP_KWARGS = {
+    "SWEEP_AUDIENCE": "https://helpdesk.example.com",
+    "SWEEP_INVOKER_EMAIL": "sched@x.iam.gserviceaccount.com",
+}
+
+
 def test_prod_without_seed_demo_starts():
-    settings = Settings(ENV="prod", JWT_SECRET="x" * 32, SEED_DEMO=False)
+    settings = Settings(ENV="prod", JWT_SECRET="x" * 32, SEED_DEMO=False, **_PROD_SWEEP_KWARGS)
     settings.check_prod_safe()
     # Unset entirely (the common case): defaults to off in prod, so it's fine.
-    Settings(ENV="prod", JWT_SECRET="x" * 32).check_prod_safe()
+    Settings(ENV="prod", JWT_SECRET="x" * 32, **_PROD_SWEEP_KWARGS).check_prod_safe()
+
+
+def test_prod_without_sweep_audience_refuses_to_start():
+    settings = Settings(ENV="prod", JWT_SECRET="x" * 32, SWEEP_INVOKER_EMAIL="sched@x.iam.gserviceaccount.com")
+    with pytest.raises(RuntimeError):
+        settings.check_prod_safe()
+
+
+def test_prod_without_sweep_invoker_email_refuses_to_start():
+    settings = Settings(ENV="prod", JWT_SECRET="x" * 32, SWEEP_AUDIENCE="https://helpdesk.example.com")
+    with pytest.raises(RuntimeError):
+        settings.check_prod_safe()
+
+
+def test_prod_gcs_backend_without_bucket_refuses_to_start():
+    settings = Settings(ENV="prod", JWT_SECRET="x" * 32, ATTACHMENTS_BACKEND="gcs", **_PROD_SWEEP_KWARGS)
+    with pytest.raises(RuntimeError):
+        settings.check_prod_safe()
+
+
+def test_prod_gcs_backend_with_bucket_starts():
+    settings = Settings(
+        ENV="prod", JWT_SECRET="x" * 32, ATTACHMENTS_BACKEND="gcs", ATTACHMENTS_BUCKET="liverx-attachments",
+        **_PROD_SWEEP_KWARGS,
+    )
+    settings.check_prod_safe()
 
 
 async def test_seed_users_is_skipped_in_prod(db_session, monkeypatch):

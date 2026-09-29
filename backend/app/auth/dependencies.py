@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
     session: AsyncSession = Depends(get_db),
 ) -> User:
@@ -32,6 +33,9 @@ async def current_user(
         or payload["iat"] < int(user.totp_enabled_at.timestamp())
     ):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+    # Read by the request-logging middleware, so a structured log line can
+    # name the caller without that middleware ever touching a token itself.
+    request.state.user_id = user.id
     return user
 
 

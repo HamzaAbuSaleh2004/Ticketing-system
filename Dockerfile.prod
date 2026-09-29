@@ -1,0 +1,63 @@
+# One production image: the built SPA plus the API, served by a single
+# non-root uvicorn process (app/prod.py). Built from the repo root so both
+# frontend/ and backend/ are in the build context. Three stages so the final
+# image carries neither the Node toolchain nor the C build toolchain (only
+# needed to compile a couple of wheels), just the venv they produced.
+
+FROM node:24-slim AS frontend-build
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+FROM python:3.12-slim AS backend-build
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /uvx /bin/
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+
+COPY backend/pyproject.toml backend/uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev
+
+COPY backend/ .
+RUN uv sync --frozen --no-dev
+
+FROM python:3.12-slim
+WORKDIR /app
+
+# libpq5 (the runtime lib) not libpq-dev (headers, only needed to build
+# asyncpg's C extension, already done in the backend-build stage).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY --from=backend-build /opt/venv /opt/venv
+COPY --from=backend-build /app /app
+COPY --from=frontend-build /frontend/dist ./static
+
+# The attachments volume (LocalStorage's ATTACHMENTS_DIR) needs to already be
+# owned by the non-root user before it's mounted over, or Cloud Run's
+# read-write volume mount inherits root:root and the app can't write to it.
+RUN useradd --create-home --uid 1000 appuser \
+    && mkdir -p /data/attachments \
+    && chown -R appuser:appuser /app /data/attachments
+USER appuser
+
+ENV PORT=8080
+EXPOSE 8080
+
+# Shell form: $PORT needs runtime expansion (Cloud Run sets it per revision,
+# and it isn't always 8080). --proxy-headers/--forwarded-allow-ips='*' trust
+# X-Forwarded-* from Cloud Run's own front end, which terminates TLS; no
+# --reload, and alembic is deliberately not run here (see app/prod.py).
+CMD uvicorn app.prod:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips='*'

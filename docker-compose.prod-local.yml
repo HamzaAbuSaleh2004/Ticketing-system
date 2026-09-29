@@ -1,0 +1,69 @@
+# Runs Dockerfile.prod against the local db, to prove the prod image works
+# before touching GCP (PLAN.md Phase 16). Not for real deployment: the
+# secrets below are throwaway local values, not read from Secret Manager.
+#
+# Always pass -p (a project name distinct from the dev stack's, which
+# defaults to this directory's name): every service here is also named `db`,
+# and without an explicit, different project name Compose treats them as the
+# same project's `db` service and recreates (replaces) whichever one is
+# already running — discovered the hard way, the first time this file ran
+# without -p, by briefly taking down the dev stack's own `db` container.
+#
+#   docker compose -f docker-compose.prod-local.yml -p ticketing-prod-local up --build
+#
+# Then: http://localhost:8080 (SPA), http://localhost:8080/api/health (API).
+#   docker compose -f docker-compose.prod-local.yml -p ticketing-prod-local down -v   # to tear down
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ticketing
+      POSTGRES_PASSWORD: ticketing
+      POSTGRES_DB: ticketing
+    volumes:
+      - db_data_prod_local:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketing"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    command: ["alembic", "upgrade", "head"]
+    environment: &prod_local_env
+      ENV: prod
+      DATABASE_URL: postgresql+asyncpg://ticketing:ticketing@db:5432/ticketing
+      JWT_SECRET: prod-local-test-secret-do-not-reuse-anywhere-else-32bytes
+      ATTACHMENTS_BACKEND: local
+      ATTACHMENTS_DIR: /data/attachments
+      SWEEP_AUDIENCE: http://localhost:8080
+      SWEEP_INVOKER_EMAIL: prod-local@example.com
+      CORS_ORIGINS: ""
+      SEED_DEMO: "false"
+      STAFF_EMAIL_DOMAINS: liverx.me
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    environment:
+      <<: *prod_local_env
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    volumes:
+      - attachments_data_prod_local:/data/attachments
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  db_data_prod_local:
+  attachments_data_prod_local:

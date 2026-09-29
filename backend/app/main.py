@@ -8,11 +8,13 @@ from app import models  # noqa: F401 -- registers models on Base.metadata
 from app.body_limit import BodySizeLimitMiddleware
 from app.config import get_settings
 from app.db import engine
+from app.request_logging import RequestLoggingMiddleware
 from app.routers.admin import router as admin_router
 from app.routers.analytics import router as analytics_router
 from app.routers.attachments import router as attachments_router
 from app.routers.auth import router as auth_router
 from app.routers.categories import router as categories_router
+from app.routers.internal import router as internal_router
 from app.routers.kb import router as kb_router
 from app.routers.organizations import router as organizations_router
 from app.routers.tickets import router as tickets_router
@@ -29,6 +31,7 @@ app = FastAPI(title="Ticketing Portal API")
 
 app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -46,6 +49,7 @@ app.include_router(organizations_router)
 app.include_router(users_router)
 app.include_router(admin_router)
 app.include_router(analytics_router)
+app.include_router(internal_router)
 
 
 @app.get("/health")

@@ -55,6 +55,7 @@ from app.schemas.ticket import (
     TicketQueueResponse,
 )
 from app.services.tickets import escalate, get_policy, lock_ticket, set_priority
+from app.storage import Storage, get_storage
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
@@ -687,6 +688,7 @@ async def upload_attachment(
     comment_id: int | None = Form(None),
     user: User = Depends(current_user),
     session: AsyncSession = Depends(get_db),
+    storage: Storage = Depends(get_storage),
 ) -> AttachmentOut:
     ticket = await _get_ticket_or_404(session, ticket_id, user)
     settings = get_settings()
@@ -718,19 +720,17 @@ async def upload_attachment(
                 status.HTTP_422_UNPROCESSABLE_CONTENT, detail="comment_id must be one of your comments on this ticket"
             )
 
-    directory = Path(settings.ATTACHMENTS_DIR) / str(ticket.id)
-    directory.mkdir(parents=True, exist_ok=True)
     # Strip any directory components from the client-supplied filename so it
-    # can't write outside `directory`; the uuid prefix also avoids collisions.
+    # can't write outside the store; the uuid prefix also avoids collisions.
     safe_name = Path(file.filename or "upload").name
     stored_name = f"{uuid4().hex}_{safe_name}"
-    file_path = directory / stored_name
-    file_path.write_bytes(contents)
+    key = f"{ticket.id}/{stored_name}"
+    await storage.save(key, contents, file.content_type)
 
     attachment = Attachment(
         ticket_id=ticket.id,
         comment_id=comment_id,
-        file_path=str(file_path),
+        file_path=key,
         filename=safe_name,
         content_type=file.content_type,
     )

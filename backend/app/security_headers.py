@@ -1,6 +1,6 @@
 """Security headers on every response. Harmless on today's JSON-only API
 responses (CSP only takes effect on the response that delivers the HTML
-document), and load-bearing once Phase 15's unified app also serves the
+document), and load-bearing once Phase 16's unified app also serves the
 SPA's index.html from this same FastAPI app."""
 
 from starlette.middleware.base import BaseHTTPMiddleware
