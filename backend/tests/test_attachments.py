@@ -2,6 +2,7 @@ import pytest_asyncio
 
 from app.models import SlaPolicy
 from app.models.enums import TicketPriority
+from tests.helpers import create_agent, login, register
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -17,11 +18,7 @@ def _auth(token: str) -> dict:
 
 
 async def _register(client, email: str) -> str:
-    resp = await client.post(
-        "/auth/register", json={"email": email, "password": "Password123!", "name": "Attacher"}
-    )
-    assert resp.status_code == 201
-    return resp.json()["access_token"]
+    return await register(client, email, name="Attacher")
 
 
 async def test_upload_attachment_allowed_type(client):
@@ -103,7 +100,6 @@ async def test_end_user_cannot_upload_to_another_users_ticket(client):
 
 
 async def test_download_is_scoped_and_internal_note_attachments_never_reach_end_users(client, db_session):
-    from tests.helpers import create_agent, login
 
     owner_token = await _register(client, "dl-owner@example.com")
     other_token = await _register(client, "dl-other@example.com")
@@ -158,7 +154,6 @@ async def test_download_is_scoped_and_internal_note_attachments_never_reach_end_
 
 async def test_upload_body_cap_type_sniffing_and_comment_ownership(client, db_session, monkeypatch):
     from app.config import get_settings
-    from tests.helpers import create_agent, login
 
     token = await _register(client, "sec-owner@example.com")
     await create_agent(db_session, email="sec-agent@example.com")

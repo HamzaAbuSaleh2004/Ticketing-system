@@ -3,7 +3,7 @@ import { Box, Button, ButtonBase, Link, Skeleton, Snackbar, Stack, Typography, u
 import { useCallback, useMemo, useState } from "react";
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { errorMessage } from "../../api/client";
-import { useAgentTicket, usePatchTicket, useQueue, useRerunTriage } from "../../api/hooks";
+import { useAgentTicket, usePatchTicket, useQueue } from "../../api/hooks";
 import type { TicketPatch } from "../../api/types";
 import { PriorityChip, StatusChip } from "../../components/TicketChips";
 import { SlaIndicator } from "../../components/SlaIndicator";
@@ -79,7 +79,6 @@ export function AgentTicketPage() {
 
   const { data: ticket, isLoading } = useAgentTicket(id);
   const patch = usePatchTicket(id);
-  const rerun = useRerunTriage(id);
   const [draft, setDraft] = useState({ body: "", internal: false });
   const [toast, setToast] = useState<string | null>(null);
 
@@ -168,22 +167,7 @@ export function AgentTicketPage() {
       </Box>
 
       <Box component="aside" aria-label="Ticket properties" sx={{ ...pane, bgcolor: sys("surfaceContainerLow"), p: 2 }}>
-        <TicketSidePanel
-          ticket={ticket}
-          onPatch={onPatch}
-          patching={patch.isPending}
-          onUseDraft={(text) => {
-            // Never discard what the agent typed, and never turn a note public.
-            if (draft.internal && draft.body.trim()) {
-              setToast("Send or clear your internal note before using the draft.");
-              return;
-            }
-            setDraft({ body: draft.body.trim() ? `${draft.body.trimEnd()}\n\n${text}` : text, internal: false });
-            setToast("Draft added to the reply. Edit it before sending.");
-          }}
-          onRerun={() => rerun.mutate(undefined, { onError: (e) => setToast(errorMessage(e, "Triage didn't run.")) })}
-          rerunning={rerun.isPending}
-        />
+        <TicketSidePanel ticket={ticket} onPatch={onPatch} patching={patch.isPending} />
       </Box>
 
       <Snackbar open={toast !== null} autoHideDuration={5000} onClose={() => setToast(null)} message={toast} />

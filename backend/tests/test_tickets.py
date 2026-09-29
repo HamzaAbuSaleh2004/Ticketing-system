@@ -3,10 +3,10 @@ from datetime import UTC, datetime, timedelta
 import pytest_asyncio
 from sqlalchemy import func, select
 
-from app.auth.security import hash_password
 from app.domain import clock
 from app.models import AuditLog, SlaPolicy, User
-from app.models.enums import Team, TicketPriority, UserRole
+from app.models.enums import Team, TicketPriority
+from tests.helpers import create_agent, login, register_full
 
 BASE = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
 
@@ -37,24 +37,16 @@ def _auth(token: str) -> dict:
 
 
 async def _register(client, email: str, name: str = "Test User", password: str = "Password123!"):
-    resp = await client.post("/auth/register", json={"email": email, "password": password, "name": name})
-    assert resp.status_code == 201
-    body = resp.json()
+    body = await register_full(client, email, password, name)
     return body["access_token"], body["user"]
 
 
 async def _create_agent(db_session, *, email: str, team: Team = Team.tier1, password: str = "Secret123!") -> User:
-    user = User(email=email, name="Agent", role=UserRole.agent, team=team, password_hash=hash_password(password))
-    db_session.add(user)
-    await db_session.commit()
-    await db_session.refresh(user)
-    return user
+    return await create_agent(db_session, email=email, team=team, password=password)
 
 
 async def _login(client, email: str, password: str) -> str:
-    resp = await client.post("/auth/login", json={"email": email, "password": password})
-    assert resp.status_code == 200
-    return resp.json()["access_token"]
+    return await login(client, email, password)
 
 
 async def _audit_count(db_session, ticket_id: int) -> int:
@@ -255,7 +247,7 @@ async def test_end_user_never_receives_internal_notes(client, db_session):
 
     as_customer = (await client.get(f"/tickets/{ticket_id}", headers=_auth(customer_token))).json()
     assert as_customer["comments"] == []
-    for agent_only in ("audit_log", "ai_triage", "sla_paused_total_seconds", "allowed_transitions"):
+    for agent_only in ("audit_log", "sla_paused_total_seconds", "allowed_transitions"):
         assert agent_only not in as_customer
 
     as_agent = (await client.get(f"/tickets/{ticket_id}", headers=_auth(agent_token))).json()

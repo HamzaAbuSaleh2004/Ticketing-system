@@ -1,6 +1,6 @@
 # Ticketing Portal
 
-A two-portal customer support system. Customers search a Gemini-grounded knowledge base and send requests; agents work a shared queue with SLAs, AI triage, internal notes and an analytics dashboard; admins manage users, categories and SLA targets. It runs entirely on your machine with Docker Compose.
+A two-portal customer support system. Customers search the help articles and send requests; agents triage and work a shared queue with SLAs, internal notes and an analytics dashboard; admins manage users, categories and SLA targets. It runs entirely on your machine with Docker Compose.
 
 Requirements are in [ticketing-portal-brief.md](ticketing-portal-brief.md). The build plan, with per-phase evidence, is in [PLAN.md](PLAN.md).
 
@@ -10,7 +10,7 @@ Requirements are in [ticketing-portal-brief.md](ticketing-portal-brief.md). The 
 docker compose up --build
 ```
 
-That's the whole setup: no `.env`, no manual steps. The `api` container runs the migrations, seeds the database (users, SLA policies, categories, 5 help articles and ~25 demo tickets), and starts the API. The `worker` container starts AI triage and the SLA sweeps.
+That's the whole setup: no `.env`, no manual steps. The `api` container runs the migrations, seeds the database (users, SLA policies, categories, 5 help articles and ~25 demo tickets), and starts the API. The `worker` container runs the SLA sweeps.
 
 | | |
 |---|---|
@@ -34,44 +34,31 @@ Every seeded account uses the password `ChangeMe123!`. It's for local demos only
 
 The demo seed also adds three customers: `priya.shah@`, `marco.rossi@` and `ines.duarte@ticketing.demo`. You can register new customer accounts at `/register`.
 
-## AI: the fake provider or Gemini
+## Two-step verification
 
-Out of the box the stack uses a **deterministic fake AI provider**, so it works offline and tests are reproducible:
+Every account, customer or LiverX staff, signs in with a password **and** a 6-digit code from an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password…). The first sign-in shows a QR code to set it up, then 10 single-use recovery codes. An admin can reset someone's two-step verification from Admin → Users; they set it up again at their next sign-in, and their old sessions end.
 
-- **Triage** picks a category and priority from keywords and writes a draft reply.
-- **KB search** embeds text with stemmed-word feature hashing, and answers by quoting the best-matching article, cited.
-
-To use **real Gemini**:
-
-1. `cp .env.example .env` and set `GEMINI_API_KEY=...`. `AI_PROVIDER` defaults to `auto`, which means Gemini whenever a key is set.
-2. `docker compose up -d --force-recreate api worker`. On start, the seed re-embeds the help articles with Gemini, because their stored embedding model no longer matches.
-3. Check it end to end: `docker compose exec api python scripts/smoke_gemini.py`. It triages a sample ticket and runs three KB questions, and it fails loudly if any call fell back to the fake.
-
-Model IDs are set only in `backend/app/config.py` (`GEMINI_TRIAGE_MODEL`, `GEMINI_ANSWER_MODEL`, `GEMINI_EMBED_MODEL`, `EMBED_DIM`), and each can be overridden from `.env`. The integration uses Gemini's REST API directly through `httpx`, with no SDK.
-
-- **When Gemini fails** (timeouts, 5xx, invalid output), triage and answers fall back to the fake and log a warning. The ticket still flows, and the agent sees "keyword fallback" in the AI panel. Query embeddings never fall back, because mixing vector spaces would corrupt search; KB search returns "unavailable" instead.
-- Set `AI_PROVIDER=fake` to force the fake even when a key is present.
+The local demo accounts above already have it set up on a shared, published key: add `LIVERXDEMOTOTPSECRETFORLOCALONLY` to your authenticator app (as a time-based key) to sign in as any of them. Demo accounts are never created when `ENV=prod`.
 
 ## What's in it
 
 **Customer portal**
 - **Help search**: the answer panel quotes help articles with numbered, linked citations, or says plainly when there's no answer and offers a request.
 - **"Your requests"**: shows what's happening in plain language ("Waiting on you").
-- **New request**: with an optional attachment. Triage lands a few seconds later, and the page shows the applied category and priority.
+- **New request**: with an optional attachment. The page says the team will review it; once an agent triages it, it shows the category and priority.
 - **Reply box**: says what a reply will do. It reopens a resolved request within 72 hours; replying to a closed one starts a linked follow-up.
 
 **Agent console**
 - **Queue**: a dense queue filtered through the URL. `j`/`k` move and `Enter` opens. Every row has an SLA ring and countdown (on track, at risk, breached or paused).
 - **Workspace**: three panes (queue, thread, properties). The thread has a Reply / Internal note composer; notes are never sent to customers, which is enforced in the API queries.
 - **Properties**: a status control that offers only legal lifecycle moves, assignment, priority, category and Escalate. Escalating bumps priority and reassigns to the least-loaded senior agent.
-- **AI triage panel**: per-field Accept and Override, "Use draft" and Re-run. The side panel also holds the full history.
+- **Manual triage**: agents set category and priority, then move `new → triaged`. The side panel also holds the full history.
 - **Dashboard**: volume, median first-response and resolution times (paused time excluded), backlog by status, and SLA breaches.
 
 **Admin**
 - Users (role and team), categories, SLA policy targets, and a change log. Every change is audit-logged.
 
 **Background worker**
-- AI triage for every new ticket, from the `ticket.created` Redis Stream. Entries a failed or dead worker left pending are reclaimed and retried.
 - Every 60s: auto-escalation of urgent/high tickets whose SLA is at risk, and auto-close of resolved tickets after the 72-hour reopen window.
 
 **Lifecycle:** `new → triaged → open → in_progress ⇄ pending → resolved → closed`. The resolution SLA pauses while a ticket is pending.
@@ -96,7 +83,7 @@ cd frontend && npm ci && npx vitest run    # frontend unit tests (SLA, lifecycle
 cd frontend && npx playwright install chromium && npx playwright test   # end-to-end, against the running stack
 ```
 
-- **Backend tests** create and migrate a separate `ticketing_test` database on the same Postgres, truncate between tests, and use Redis DB 15, so they never disturb the dev stack's data or worker.
+- **Backend tests** create and migrate a separate `ticketing_test` database on the same Postgres, truncate between tests, so they never disturb the dev stack's data.
 - **Playwright specs** create their own data and restore anything shared that they change.
 
 ## When you change dependencies
@@ -112,8 +99,6 @@ These are seams only; nothing is deployed in this iteration.
 
 | Here | GCP | Change |
 |---|---|---|
-| Postgres + pgvector container | Cloud SQL (pgvector) | `DATABASE_URL` |
-| Redis Streams `EventBus` | Pub/Sub | a new `events/` implementation |
-| Gemini API key over REST | Vertex AI Gemini | a new `AIProvider` implementation and auth |
+| Postgres container | Cloud SQL for PostgreSQL | `DATABASE_URL` |
 | Local attachment volume | Cloud Storage | the attachment storage module |
 | uvicorn containers | Cloud Run | the Dockerfiles are 12-factor |

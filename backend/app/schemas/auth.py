@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.models.enums import Team, UserRole
@@ -51,3 +53,32 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class MfaChallenge(BaseModel):
+    """The password step's answer: no access token until the second factor.
+    `enroll` = set up an authenticator first; `verify` = enter a code."""
+
+    mfa_token: str
+    mfa: Literal["enroll", "verify"]
+
+
+class MfaTokenRequest(BaseModel):
+    mfa_token: str
+
+
+class MfaCodeRequest(BaseModel):
+    mfa_token: str
+    # A 6-digit authenticator code, or (verify only) a recovery code.
+    code: str = Field(min_length=1, max_length=32)
+
+
+class MfaSetupResponse(BaseModel):
+    secret: str
+    otpauth_uri: str
+    qr_svg_data_uri: str
+
+
+class MfaEnabledResponse(TokenResponse):
+    # Shown once; only their hashes are stored.
+    recovery_codes: list[str]

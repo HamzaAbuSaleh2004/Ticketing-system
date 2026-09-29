@@ -4,12 +4,11 @@ import type { AuditEntry, User } from "../../api/types";
 import { PRIORITY_LABEL, STATUS_LABEL, absoluteTime, relativeTime, ticketRef } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
 
-// Read after the actor's name: "Tara Tier1 updated", "System ran AI triage".
+// Read after the actor's name: "Tara Tier1 updated", "System closed it after the reopen window".
 const ACTION: Record<string, string> = {
   "ticket.created": "created the ticket",
   "ticket.created_from_reply": "created this from a reply to a closed ticket",
   "ticket.updated": "updated",
-  "ticket.ai_triaged": "ran AI triage",
   "ticket.reopened_by_reply": "reopened it by replying",
   "ticket.auto_escalated": "escalated it because the SLA was at risk",
   "ticket.auto_closed": "closed it after the reopen window",
@@ -29,10 +28,6 @@ function describe(key: string, value: unknown, names: Namer): string | null {
       return value ? `Assigned to ${names.staff?.find((u) => u.id === value)?.name ?? `user ${value}`}` : "Unassigned";
     case "escalated":
       return value ? "Escalated" : null;
-    case "ai_accepted_fields":
-      return "AI suggestion decisions recorded";
-    case "ai_summary":
-      return "Summary updated";
     case "parent_ticket_id":
       return `Follow-up to ${ticketRef(Number(value))}`;
     default:

@@ -9,4 +9,13 @@ describe("describeChange", () => {
     expect(describeChange({ diff_json: { after: { name: "Refunds", active: true } } })).toBe("Name Refunds, Active yes");
     expect(describeChange({ diff_json: null })).toBe("");
   });
+
+  it("reads sign-in security events as sentences", () => {
+    expect(describeChange({ action: "user.2fa_reset", diff_json: { before: { two_factor_enabled: true }, after: { two_factor_enabled: false } } })).toBe(
+      "Two-step verification reset",
+    );
+    expect(describeChange({ action: "user.recovery_code_used", diff_json: { remaining: 9 } } as never)).toBe(
+      "Signed in with a recovery code, 9 left",
+    );
+  });
 });

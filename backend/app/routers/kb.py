@@ -1,26 +1,20 @@
-import logging
+import re
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai import get_ai_provider
-from app.ai.fake import FakeProvider
-from app.ai.gemini import GeminiError
 from app.auth.dependencies import current_user
 from app.config import get_settings
 from app.db import get_db
-from app.domain.grounding import ground_citations
 from app.models import KnowledgeBaseArticle, User
-from app.schemas.ai import KbContext
-from app.schemas.kb import KbArticleOut, KbSearchResponse, KbSource
-
-logger = logging.getLogger(__name__)
+from app.models.kb_article import KB_SEARCH_CONFIG, KB_SEARCH_VECTOR
+from app.schemas.kb import KbArticleOut, KbSearchResponse, KbSearchResult
 
 router = APIRouter(prefix="/kb", tags=["kb"])
 
 _SNIPPET_CHARS = 180
+_WORD = re.compile(r"\w+")
 
 
 def _snippet(body: str) -> str:
@@ -35,47 +29,26 @@ async def search(
     user: User = Depends(current_user),
     session: AsyncSession = Depends(get_db),
 ) -> KbSearchResponse:
-    settings = get_settings()
-    provider = get_ai_provider()
-    try:
-        [query_vector] = await provider.embed([q], task="query")
-    except (GeminiError, httpx.HTTPError) as exc:
-        logger.warning("KB query embedding failed: %s", exc)
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="Search is unavailable right now") from exc
-
-    distance = KnowledgeBaseArticle.embedding.cosine_distance(query_vector)
+    """Postgres full-text search over title + body. Any of the question's
+    stemmed words can match (OR, not AND), so "forgot my password" finds the
+    password article without needing every word in it; ts_rank_cd puts the
+    articles matching more of them, closer together, first. websearch_to_tsquery
+    never raises on user input, and stopword-only input matches nothing."""
+    words = _WORD.findall(q)
+    if not words:
+        return KbSearchResponse(results=[])
+    query = func.websearch_to_tsquery(literal_column(KB_SEARCH_CONFIG), " or ".join(words))
+    rank = func.ts_rank_cd(KB_SEARCH_VECTOR, query)
     rows = (
         await session.execute(
-            select(KnowledgeBaseArticle, distance.label("distance"))
-            # Only vectors from the model that embedded the query are comparable.
-            .where(KnowledgeBaseArticle.embedding_model == provider.EMBEDDING_MODEL_ID)
-            .order_by(distance)
-            .limit(settings.KB_SEARCH_TOP_K)
+            select(KnowledgeBaseArticle)
+            .where(KB_SEARCH_VECTOR.op("@@")(query))
+            .order_by(rank.desc(), KnowledgeBaseArticle.id)
+            .limit(get_settings().KB_SEARCH_LIMIT)
         )
-    ).all()
-
-    threshold = (
-        settings.KB_SIMILARITY_THRESHOLD_FAKE
-        if isinstance(provider, FakeProvider)
-        else settings.KB_SIMILARITY_THRESHOLD
-    )
-    if not rows or 1 - rows[0].distance < threshold:
-        return KbSearchResponse(answer=None, sources=[])
-
-    articles = [row.KnowledgeBaseArticle for row in rows]
-    grounded = await provider.answer(
-        question=q, articles=[KbContext(id=a.id, title=a.title, body=a.body) for a in articles]
-    )
-    answer, source_ids = ground_citations(
-        grounded.answer, grounded.cited_article_ids, [a.id for a in articles]
-    )
-    by_id = {a.id: a for a in articles}
+    ).scalars()
     return KbSearchResponse(
-        answer=answer,
-        sources=[
-            KbSource(id=i, title=by_id[i].title, slug=by_id[i].slug, snippet=_snippet(by_id[i].body))
-            for i in source_ids
-        ],
+        results=[KbSearchResult(id=a.id, title=a.title, slug=a.slug, snippet=_snippet(a.body)) for a in rows]
     )
 
 

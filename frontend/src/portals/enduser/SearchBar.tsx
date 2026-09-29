@@ -6,7 +6,7 @@ import { sys } from "../../theme/scheme";
 import { typescale } from "../../theme/tokens";
 
 /** M3 search bar: full-shape, surface-container-high, 56dp. Searches on
- * Enter rather than per keystroke, so each Gemini call is intentional. */
+ * Enter rather than per keystroke, so results don't jump while typing. */
 export function SearchBar({ value, onSearch }: { value: string; onSearch: (q: string) => void }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => {

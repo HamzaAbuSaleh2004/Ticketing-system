@@ -24,7 +24,7 @@
 
 ### Design direction (stated up front, as the brief requires)
 
-- **Seed color: `#1E6A5E` "Spruce"**, a deep blue-green. It's calm and clinical without being Google blue. It generates warm-leaning neutrals, a teal primary, and a dusty-rose tertiary that we use for "attention" accents. Error red stays clearly distinct from the primary.
+- **Seed color: `#1E6A5E` "Spruce"**, a deep blue-green. It's calm and clinical without being Google blue. With `SchemeContent` it generates cool, green-tinted neutrals, a teal primary, and a dusky-violet tertiary (`#4D3F71` light / `#CFBEF8` dark, measured). The tertiary is used as a flat "attention" accent for SLA at risk and internal notes, never as a gradient. (Corrected after Phase 6; this sentence originally said "warm neutrals / dusty-rose".) Error red stays clearly distinct from the primary.
 - **Display typeface: Google Sans Flex** (OFL, on Google Fonts since Dec 2025). Used for headlines/titles. Use its `ROND` (rounded terminals) axis at a moderate value on the end-user portal and 0 on the agent console, so one family carries two personalities.
 - **Body typeface: Roboto Flex.** Used for body, labels and tables. Its `opsz` axis lets the dense agent tables read cleanly at 13px.
 - **No monospace face.** Ticket IDs (`TCK-01042`), timestamps and SLA countdowns use Roboto Flex with `font-variant-numeric: tabular-nums`, so the digits don't jitter as they tick. (Revised 2026-09-24: `frontend-design` lists "a monospace face for small data labels" as a template tell. Dropping it also keeps us to the brief's two typefaces.)
@@ -562,6 +562,32 @@ Each phase ends with **Verify**: commands the executor must actually run, with t
     - Tests: `test_upload_body_cap_type_sniffing_and_comment_ownership`, `test_tokens_without_exp_or_sub_are_rejected`, `test_seed_users_is_skipped_in_prod`.
     - **Accepted as policy, not fixed (L3):** public ticket models include IDs, `escalated` and `ai_summary` for the customer's own tickets. None of these is on the brief's agent-only list.
   - **Still unverified:** the **live Gemini path**. No `GEMINI_API_KEY` exists here, and `scripts/smoke_gemini.py` reports `nothing to smoke-test` (exit 2). The REST shapes are verified only against the ai.google.dev docs and `httpx.MockTransport` tests.
+
+### Phase 11 — Simplify: no AI, manual triage, no Redis, mandatory 2FA
+**Scope change from the user (2026-09-29).** The help desk is for LiverX staff and LiverX customers. The user asked for: no AI anywhere (triage is manual), a simpler system, and two-factor authentication for **every** account, customers and `@liverx` staff alike. The user chose **authenticator-app TOTP** over email codes. This replaces these §0 rows: *AI*, *Models*, the pgvector part of *DB*, and *Queue*. With no AI triage, nothing consumes `ticket.created`, so Redis and the EventBus go too; the worker keeps only the two SLA sweeps.
+- [x] **Remove AI.** Delete `app/ai/`, `schemas/ai.py`, `services/triage.py`, `domain/grounding.py`, `scripts/smoke_gemini.py` and their tests. Drop `POST /tickets/:id/ai-triage`, the PATCH `ai_accept` field, and `tickets.ai_triage`/`ai_summary`. Agents triage by hand (`new → triaged`, then set category and priority).
+- [x] **KB search without AI.** Keep `GET /kb/search?q=`, now Postgres full-text search (OR of the query's stemmed words, ranked with `ts_rank_cd`) over title + body, returning the matching articles with a snippet. No generated answer. Drop `knowledge_base_articles.embedding`/`embedding_model` and the `vector` extension; the DB image becomes plain `postgres:16`.
+- [x] **Remove Redis.** Drop the `redis` service, `redis_client.py`, `events/`, the `redis` dependency and Redis from `/health`. The worker runs only the SLA-risk and auto-close sweeps.
+- [x] **Mandatory TOTP 2FA** for all roles:
+  - Login and register never return an access token directly. They return a 5-minute `mfa_token` (JWT, `typ=mfa`) and `mfa: "enroll" | "verify"`. Access tokens carry `typ=access`, and only those are accepted by `current_user`.
+  - Enrolment: `POST /auth/2fa/setup` returns the secret, `otpauth://` URI and a QR code (SVG data URI). `POST /auth/2fa/enable` confirms the first code, returns 10 single-use recovery codes (stored hashed) and the access token. Setup is refused once 2FA is enabled, so a password alone can't re-enrol.
+  - Verify: `POST /auth/2fa/verify` accepts a TOTP code (±1 step) or a recovery code. A code's time step can't be reused. 5 wrong codes lock 2FA for 15 minutes (429).
+  - Admin: `POST /admin/users/:id/reset-2fa` (not on yourself), audit-logged; the user re-enrols at next sign-in. The users table shows 2FA status.
+  - Local demo accounts share a published TOTP secret (README), like their password. They're never created in prod.
+- [x] Frontend: remove the AI triage panel, AI one-liners and the grounded-answer panel (search shows matching articles instead); "We're reviewing this" copy no longer promises automatic triage; a two-step sign-in (password, then code) with an enrolment screen (QR, manual key, recovery codes).
+- **Verify:** `pytest` (2FA: enrol, verify, replay rejected, lockout, recovery code single-use, mfa token rejected as access token, admin reset; KB FTS ranking), `vitest`, `npm run typecheck`/`build`, Playwright (full suite updated for 2FA, plus a UI enrolment test), fresh `docker compose down -v && up --build` with no `.env`. Screenshots of the 2FA screens, critiqued; `material-3` audit of the new screens.
+
+  **Evidence (2026-09-29):**
+  - AI, Redis and pgvector removed (`app/ai`, triage, grounding, events, `redis_client`, smoke script and their tests deleted; `redis`/`pgvector`/runtime `httpx` dropped from `pyproject.toml`; compose has no `redis` service and uses `postgres:16`). `/health` → `{"status":"ok","db":true}`.
+  - Migrations squashed into `6c554119e30e_initial_schema.py` (the old two imported `pgvector`; nothing was deployed). `alembic upgrade head → downgrade base → upgrade head → alembic check` → "No new upgrade operations detected". Local DBs need `docker compose down -v` once.
+  - `pytest` → **127 passed**; ruff clean. New: `test_auth.py` 2FA cases (enrol wrong→right code, setup refused once enabled, verify before enrolment 409, replay rejected, ±1 step drift only, 5 wrong codes → 429 for 15 min, right code resets the count, recovery codes single-use + audited, expired/wrong-typ tokens, account without 2FA can't use an access token, admin reset ends sessions and forces re-enrolment, reset rules 409/404/403); `test_kb.py` FTS (5 queries rank the right article first; stopword/symbol/SQL-ish input → empty; ≤5 results); seeded demo accounts verify with the published secret.
+  - `npm run typecheck` clean, `vitest` → **25 passed**, `npm run build` OK. Playwright → **19 passed** (rerun twice): UI enrolment with a wrong code then the right one, recovery-code sign-in, manual triage in the agent console, admin 2FA reset on a throwaway account, axe 0 violations including the verify and setup screens.
+  - Screenshots in `docs/screenshots/phase-11/` (setup light/dark/360, recovery codes, verify, search results light/dark/360, no results, request received, admin reset dialog). Setup screen reviewed: QR stays black-on-white in dark mode, key grouped in 4s, steps numbered because they are a sequence.
+  - **Not yet run:** the `code-review` skill at high on this diff and a full `material-3` audit report for the new screens. They were deferred to hand the summary to the user; run them before Phase 12.
+
+
+### Phase 12 — Google Cloud deployment (not started; needs the user's go-ahead)
+Deploy only after the user has reviewed the Phase 11 summary. Cheapest database: **Cloud SQL for PostgreSQL 16, Enterprise edition, shared-core `db-f1-micro`, HDD storage, zonal, no HA**. Details and costs are in the Phase 11 hand-over note. Needed before deploy: attachments on Cloud Storage (Cloud Run disks are ephemeral), sweeps triggered by Cloud Scheduler instead of an always-on worker, the frontend served as a static build, secrets in Secret Manager, `ENV=prod` with the CORS origin from config.
 
 ---
 

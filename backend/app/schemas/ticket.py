@@ -3,7 +3,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.models.enums import TicketPriority, TicketStatus
-from app.schemas.ai import TriageField
 
 
 class TicketCreate(BaseModel):
@@ -21,11 +20,6 @@ class TicketPatch(BaseModel):
     priority: TicketPriority | None = None
     category: str | None = None
     escalate: bool | None = None
-    # Accept these fields of the AI triage suggestion: category/priority are
-    # set to the suggested value; every accepted field is recorded in
-    # ai_triage.accepted_fields. Setting category/priority directly records
-    # "accepted" or "overridden" depending on whether it matches.
-    ai_accept: list[TriageField] | None = None
 
 
 class CommentCreate(BaseModel):
@@ -59,7 +53,7 @@ class AttachmentOut(BaseModel):
 class AuditLogOut(BaseModel):
     id: int
     actor_id: int | None
-    # None for the system (AI triage, SLA sweeps): actor_id is NULL.
+    # None for the system (the SLA sweeps): actor_id is NULL.
     actor_name: str | None = None
     action: str
     diff_json: dict | None
@@ -77,7 +71,6 @@ class TicketListItem(BaseModel):
     requester_id: int
     assignee_id: int | None
     escalated: bool
-    ai_summary: str | None
     sla_response_due: datetime | None
     sla_resolution_due: datetime | None
     created_at: datetime
@@ -112,9 +105,8 @@ class TicketQueueResponse(BaseModel):
 
 
 class TicketDetailPublic(TicketListItem):
-    """What an end user gets. Agent-only fields (the AI triage with its
-    response draft, pause accounting, legal transitions, audit trail) are
-    absent from the model, not just nulled."""
+    """What an end user gets. Agent-only fields (pause accounting, legal
+    transitions, audit trail) are absent from the model, not just nulled."""
 
     description: str
     sla_paused_at: datetime | None
@@ -134,7 +126,6 @@ class TicketDetail(TicketDetailPublic):
     payload can never validate as this model."""
 
     sla_paused_total_seconds: int
-    ai_triage: dict | None
     requester_name: str
     requester_email: str
     assignee_name: str | None

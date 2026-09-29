@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { parseAnswer } from "./citations";
 import { CUSTOMER_STATUS, compactAgo, relativeTime, replyMode, ticketRef } from "./tickets";
 
 describe("replyMode (mirrors the backend's customer_reply_outcome)", () => {
@@ -32,19 +31,6 @@ describe("customer-facing status copy", () => {
   it("says 'Waiting on you' for pending", () => {
     expect(CUSTOMER_STATUS.pending.label).toBe("Waiting on you");
     expect(CUSTOMER_STATUS.new.line).toBe("We're reviewing this");
-  });
-});
-
-describe("parseAnswer", () => {
-  it("splits markers and drops out-of-range ones", () => {
-    expect(parseAnswer("Reset it [1]. Links expire [2]. Bogus [3].", 2)).toEqual([
-      { kind: "text", text: "Reset it" },
-      { kind: "cite", n: 1 },
-      { kind: "text", text: ". Links expire" },
-      { kind: "cite", n: 2 },
-      { kind: "text", text: ". Bogus" },
-      { kind: "text", text: "." },
-    ]);
   });
 });
 

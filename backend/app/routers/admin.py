@@ -31,6 +31,7 @@ class AdminUserOut(BaseModel):
     name: str
     role: UserRole
     team: Team | None
+    two_factor_enabled: bool
 
     model_config = {"from_attributes": True}
 
@@ -158,6 +159,36 @@ async def patch_user(
             action="user.updated", diff={"before": before, "after": after},
         )
         await session.commit()
+    return AdminUserOut.model_validate(target)
+
+
+@router.post("/users/{user_id}/reset-2fa", response_model=AdminUserOut)
+async def reset_2fa(
+    user_id: int, admin: User = Depends(_admin), session: AsyncSession = Depends(get_db)
+) -> AdminUserOut:
+    """For someone who lost their authenticator and recovery codes: they set
+    it up again at their next sign-in, and their current sessions end."""
+    target = await session.get(User, user_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found")
+    if target.id == admin.id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="Another admin has to reset your two-step verification"
+        )
+    was_enabled = target.two_factor_enabled
+    target.totp_secret = None
+    target.totp_enabled_at = None
+    target.totp_last_step = None
+    target.recovery_code_hashes = []
+    target.mfa_failed_attempts = 0
+    target.mfa_locked_until = None
+    await write_audit(
+        session, entity_type="user", entity_id=target.id, actor_id=admin.id,
+        action="user.2fa_reset", diff={"before": {"two_factor_enabled": was_enabled},
+                                       "after": {"two_factor_enabled": False}},
+    )
+    await session.commit()
+    await session.refresh(target)
     return AdminUserOut.model_validate(target)
 
 

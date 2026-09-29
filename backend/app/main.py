@@ -8,7 +8,6 @@ from app import models  # noqa: F401 -- registers models on Base.metadata
 from app.body_limit import BodySizeLimitMiddleware
 from app.config import get_settings
 from app.db import engine
-from app.redis_client import get_redis
 from app.routers.admin import router as admin_router
 from app.routers.analytics import router as analytics_router
 from app.routers.attachments import router as attachments_router
@@ -48,20 +47,10 @@ app.include_router(analytics_router)
 @app.get("/health")
 async def health() -> dict:
     db_ok = False
-    redis_ok = False
-
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         db_ok = True
     except Exception:
         logger.exception("Health check: database unreachable")
-
-    try:
-        await get_redis().ping()
-        redis_ok = True
-    except Exception:
-        logger.exception("Health check: redis unreachable")
-
-    status = "ok" if db_ok and redis_ok else "degraded"
-    return {"status": status, "db": db_ok, "redis": redis_ok}
+    return {"status": "ok" if db_ok else "degraded", "db": db_ok}

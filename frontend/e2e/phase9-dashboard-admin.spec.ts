@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { apiAs } from "./api";
 import { shot, signIn } from "./helpers";
+import { nextCode } from "./totp";
 
 async function axe(page: Page, label: string) {
   const r = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
@@ -103,6 +104,29 @@ test("admin: SLA policy, categories and team edits are saved and logged", async 
   await expect(log).toContainText("User Tom Tier1");
   await expect(log).toContainText("Team Tier 1 to Senior");
   await shot(page, "phase-9", "admin-changes-1280");
+
+  // Two-step verification reset, on a throwaway account (the demo accounts stay enrolled).
+  const stamp = Date.now() % 1_000_000;
+  const who = `Lou Lostphone ${stamp}`;
+  const email = `lost-phone-${stamp}@example.com`;
+  const reg = await (await admin.ctx.post("/auth/register", { data: { email, password: "Password123!", name: who } })).json();
+  const setup = await (await admin.ctx.post("/auth/2fa/setup", { data: { mfa_token: reg.mfa_token } })).json();
+  const enabled = await admin.ctx.post("/auth/2fa/enable", { data: { mfa_token: reg.mfa_token, code: await nextCode(email, setup.secret) } });
+  expect(enabled.ok()).toBeTruthy();
+  // Made through the API after the table loaded, so load it again.
+  await page.goto("/admin?tab=users");
+  const row = page.getByRole("row", { name: new RegExp(who) });
+  await expect(row).toContainText("On");
+  await row.getByRole("button", { name: `Reset two-step verification for ${who}` }).click();
+  const dialog = page.getByRole("dialog", { name: `Reset two-step verification for ${who}?` });
+  await shot(page, "phase-11", "admin-reset-2fa-1280");
+  await dialog.getByRole("button", { name: "Reset" }).click();
+  await expect(page.getByText(`Two-step verification reset for ${who}`)).toBeVisible();
+  await expect(row).toContainText("Not set up yet");
+  const relogin = await (await admin.ctx.post("/auth/login", { data: { email, password: "Password123!" } })).json();
+  expect(relogin.mfa).toBe("enroll");
+  await page.getByRole("tab", { name: "Change log" }).click();
+  await expect(log).toContainText("Two-step verification reset");
 
   } finally {
     // Leave the dev data at the seeded targets (low: 8h / 72h).

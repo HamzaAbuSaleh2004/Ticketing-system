@@ -2,7 +2,7 @@ import AddOutlined from "@mui/icons-material/AddOutlined";
 import { Box, Button, Stack, Typography } from "@mui/material";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
 import { MIN_QUERY, useKbSearch, useMyTickets } from "../../api/hooks";
-import { KbAnswerPanel } from "./KbAnswerPanel";
+import { KbResults } from "./KbResults";
 import { RequestList } from "./RequestList";
 import { SearchBar } from "./SearchBar";
 
@@ -21,7 +21,7 @@ export function HomePage() {
 
       {q.length >= MIN_QUERY ? (
         <Box sx={{ mt: 3 }} aria-live="polite">
-          <KbAnswerPanel q={q} data={search.data} isLoading={search.isFetching && !search.data} error={search.error} />
+          <KbResults q={q} data={search.data} isLoading={search.isFetching && !search.data} error={search.error} />
         </Box>
       ) : null}
 

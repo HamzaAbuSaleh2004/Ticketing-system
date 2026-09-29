@@ -1,7 +1,7 @@
 [project]
 name = "ticketing-backend"
 version = "0.1.0"
-description = "Ticketing portal backend (FastAPI + Postgres/pgvector + Redis Streams)"
+description = "Ticketing portal backend (FastAPI + Postgres)"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
@@ -13,15 +13,15 @@ dependencies = [
     "pydantic-settings>=2.6",
     "pyjwt>=2.10",
     "bcrypt>=4.2",
-    "redis>=5.2",
-    "httpx>=0.28",
     "python-multipart>=0.0.17",
-    "pgvector>=0.3",
     "email-validator>=2.2",
+    "pyotp>=2.10.0",
+    "segno>=1.6.6",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "ruff>=0.7",

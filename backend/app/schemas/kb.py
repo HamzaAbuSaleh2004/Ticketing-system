@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
-class KbSource(BaseModel):
+class KbSearchResult(BaseModel):
     id: int
     title: str
     slug: str
@@ -11,9 +11,8 @@ class KbSource(BaseModel):
 
 
 class KbSearchResponse(BaseModel):
-    # null when nothing relevant was found; the UI then offers "Submit a request".
-    answer: str | None
-    sources: list[KbSource]
+    # Best match first; empty when nothing matched, and the UI then offers a request.
+    results: list[KbSearchResult]
 
 
 class KbArticleOut(BaseModel):

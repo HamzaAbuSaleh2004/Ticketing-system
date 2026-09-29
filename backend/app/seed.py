@@ -1,10 +1,10 @@
 import asyncio
 import logging
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai import get_ai_provider
 from app.auth.security import hash_password
 from app.config import get_settings
 from app.db import SessionLocal
@@ -22,6 +22,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 SEED_PASSWORD = "ChangeMe123!"
+# Local demo accounts come with 2FA already set up on this published secret
+# (add it to an authenticator app, see README), like their published
+# password. Neither is ever used in prod, where no demo accounts are created.
+DEMO_TOTP_SECRET = "LIVERXDEMOTOTPSECRETFORLOCALONLY"
 
 USERS = [
     {"email": "admin@ticketing.demo", "name": "Ada Admin", "role": UserRole.admin, "team": None},
@@ -153,6 +157,9 @@ async def seed_users(session: AsyncSession) -> None:
                 role=u["role"],
                 team=u["team"],
                 password_hash=hash_password(SEED_PASSWORD),
+                totp_secret=DEMO_TOTP_SECRET,
+                # Real time: it's compared with access tokens' `iat`.
+                totp_enabled_at=datetime.now(UTC),
             )
         )
     await session.commit()
@@ -177,38 +184,10 @@ async def seed_categories(session: AsyncSession) -> None:
 
 
 async def seed_kb_articles(session: AsyncSession) -> None:
-    provider = get_ai_provider()
-    existing = {
-        a.slug: a for a in await session.scalars(select(KnowledgeBaseArticle))
-    }
-
-    # Re-embed whenever the stored vector came from a different model (e.g.
-    # fake-mode vectors once GEMINI_API_KEY is added); otherwise query
-    # vectors from the new model get compared against stale ones.
-    stale: list[KnowledgeBaseArticle] = []
+    existing = set(await session.scalars(select(KnowledgeBaseArticle.slug)))
     for a in KB_ARTICLES:
-        article = existing.get(a["slug"])
-        if article is None:
-            article = KnowledgeBaseArticle(slug=a["slug"], title=a["title"], body=a["body"], tags=a["tags"])
-            session.add(article)
-        if article.embedding_model != provider.EMBEDDING_MODEL_ID:
-            stale.append(article)
-
-    if stale:
-        # Title + body (not body alone), so a query matching only the title
-        # still ranks the article well.
-        texts = [f"{a.title}\n\n{a.body}" for a in stale]
-        try:
-            vectors = await provider.embed(texts, task="document")
-        except Exception:
-            # Don't block API startup on the AI provider (e.g. a bad key):
-            # articles stay unembedded/stale and are retried on the next start.
-            logger.exception("seed: embedding KB articles failed; KB search will be empty until re-seeded")
-        else:
-            for article, vector in zip(stale, vectors, strict=True):
-                article.embedding = vector
-                article.embedding_model = provider.EMBEDDING_MODEL_ID
-
+        if a["slug"] not in existing:
+            session.add(KnowledgeBaseArticle(slug=a["slug"], title=a["title"], body=a["body"], tags=a["tags"]))
     await session.commit()
 
 

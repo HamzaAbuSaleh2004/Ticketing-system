@@ -60,7 +60,6 @@ export function QueueTable({
         <TableBody>
           {rows.map((t, i) => {
             const isSelected = i === selected;
-            const summary = t.ai_summary && t.ai_summary !== t.subject ? t.ai_summary : null;
             return (
               <TableRow
                 key={t.id}
@@ -93,11 +92,6 @@ export function QueueTable({
                   >
                     {t.subject}
                   </Link>
-                  {summary ? (
-                    <Typography variant="bodyMedium" component="span" sx={{ color: sys("onSurfaceVariant"), ml: 1 }}>
-                      {summary}
-                    </Typography>
-                  ) : null}
                   {t.escalated ? (
                     <Typography variant="labelMedium" component="span" sx={{ color: sys("error"), ml: 1 }}>
                       Escalated

@@ -1,13 +1,20 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "../api/client";
-import type { Role, TokenResponse, User } from "../api/types";
+import type { MfaChallenge, MfaEnabled, MfaSetup, Role, TokenResponse, User } from "../api/types";
 import { session, type Session } from "./session";
 
+/** Signing in is two steps for every account: the password gives an
+ * MfaChallenge, and only a code (or first-time setup) starts a session. */
 type AuthState = {
   user: User | null;
-  login: (email: string, password: string) => Promise<User>;
-  register: (name: string, email: string, password: string) => Promise<User>;
+  login: (email: string, password: string) => Promise<MfaChallenge>;
+  register: (name: string, email: string, password: string) => Promise<MfaChallenge>;
+  setupTwoStep: (mfaToken: string) => Promise<MfaSetup>;
+  /** Turns 2FA on; the session starts with `accept`, after the recovery codes are shown. */
+  enableTwoStep: (mfaToken: string, code: string) => Promise<MfaEnabled>;
+  verifyTwoStep: (mfaToken: string, code: string) => Promise<User>;
+  accept: (resp: TokenResponse) => User;
   logout: () => void;
 };
 
@@ -54,12 +61,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     return {
       user: current?.user ?? null,
-      login: async (email, password) =>
-        accept(await api<TokenResponse>("/auth/login", { method: "POST", body: { email: email.trim(), password } })),
-      register: async (name, email, password) =>
-        accept(
-          await api<TokenResponse>("/auth/register", { method: "POST", body: { name, email: email.trim(), password } }),
-        ),
+      login: (email, password) =>
+        api<MfaChallenge>("/auth/login", { method: "POST", body: { email: email.trim(), password } }),
+      register: (name, email, password) =>
+        api<MfaChallenge>("/auth/register", { method: "POST", body: { name, email: email.trim(), password } }),
+      setupTwoStep: (mfaToken) => api<MfaSetup>("/auth/2fa/setup", { method: "POST", body: { mfa_token: mfaToken } }),
+      enableTwoStep: (mfaToken, code) =>
+        api<MfaEnabled>("/auth/2fa/enable", { method: "POST", body: { mfa_token: mfaToken, code } }),
+      verifyTwoStep: async (mfaToken, code) =>
+        accept(await api<TokenResponse>("/auth/2fa/verify", { method: "POST", body: { mfa_token: mfaToken, code } })),
+      accept,
       logout: () => session.clear(),
     };
   }, [current, queryClient]);

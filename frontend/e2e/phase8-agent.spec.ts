@@ -1,15 +1,21 @@
 import { expect, test, type Page } from "@playwright/test";
-import { apiAs, waitForTriage } from "./api";
+import { apiAs, triage } from "./api";
 import { shot, signIn } from "./helpers";
 
+// [subject, description, category, priority] as an agent would triage them.
 const QUEUE_TICKETS = [
-  ["Can't log in after changing my password", "I reset my password and now I cannot log in at all. Urgent, demo in an hour."],
-  ["Invoice shows the wrong company name", "Our March invoice lists our old company name. Can you reissue it?"],
-  ["Dashboard is really slow", "The analytics page takes a minute to load and sometimes shows an error."],
-  ["How do I export my data?", "Question: how can I export all of my ticket history?"],
-  ["Charged twice for the annual plan", "I was charged twice on my card for the annual subscription."],
-  ["Delete my personal data", "Please delete all personal data you hold about me (GDPR request)."],
+  ["Can't log in after changing my password", "I reset my password and now I cannot log in at all. Urgent, demo in an hour.", "account-login", "urgent"],
+  ["Invoice shows the wrong company name", "Our March invoice lists our old company name. Can you reissue it?", "billing", "normal"],
+  ["Dashboard is really slow", "The analytics page takes a minute to load and sometimes shows an error.", "technical-issue", "high"],
+  ["How do I export my data?", "Question: how can I export all of my ticket history?", "data-privacy", "low"],
+  ["Charged twice for the annual plan", "I was charged twice on my card for the annual subscription.", "billing", "high"],
+  ["Delete my personal data", "Please delete all personal data you hold about me (GDPR request).", "data-privacy", "normal"],
 ];
+
+async function chooseField(page: Page, name: string, option: RegExp) {
+  await page.getByRole("combobox", { name }).click();
+  await page.getByRole("option", { name: option }).click();
+}
 
 async function chooseStatus(page: Page, label: RegExp) {
   await page.getByRole("combobox", { name: "Status" }).click();
@@ -22,10 +28,11 @@ test("seed a realistic queue", async () => {
   const customer = await apiAs("user2@ticketing.demo");
   const agent = await apiAs("agent2@ticketing.demo");
   const ids: number[] = [];
-  for (const [subject, description] of QUEUE_TICKETS) {
-    ids.push((await customer.post("/tickets", { subject, description })).id);
+  for (const [subject, description, category, priority] of QUEUE_TICKETS) {
+    const { id } = await customer.post("/tickets", { subject, description });
+    await triage(agent, id, { category, priority });
+    ids.push(id);
   }
-  for (const id of ids) await waitForTriage(customer, id);
   // A spread of states so the queue shows every SLA indicator state.
   await agent.patch(`/tickets/${ids[1]}`, { assignee_id: agent.id });
   await agent.patch(`/tickets/${ids[1]}`, { status: "open" });
@@ -44,7 +51,6 @@ test("agent walks a ticket through the full lifecycle in the UI, internal note s
   });
   const id: number = created.id;
   const ref = `TCK-${String(id).padStart(5, "0")}`;
-  await waitForTriage(customer, id);
 
   await page.setViewportSize({ width: 1600, height: 1000 });
   await signIn(page, "agent1@ticketing.demo");
@@ -57,8 +63,8 @@ test("agent walks a ticket through the full lifecycle in the UI, internal note s
 
   // Filters live in the URL.
   await page.getByRole("button", { name: /^Priority:/ }).click();
-  await page.getByRole("menuitemradio", { name: "High" }).click();
-  await expect(page).toHaveURL(/priority=high/);
+  await page.getByRole("menuitemradio", { name: "Normal" }).click();
+  await expect(page).toHaveURL(/priority=normal/);
   await expect(table.getByRole("link", { name: subject })).toBeVisible();
   await page.goto("/agent");
 
@@ -73,12 +79,14 @@ test("agent walks a ticket through the full lifecycle in the UI, internal note s
   await expect(page.getByText(ref).first()).toBeVisible();
 
   const aside = page.getByRole("complementary", { name: "Ticket properties" });
-  // AI triage: accept the category, use the draft.
-  await expect(aside.getByRole("heading", { name: "AI triage" })).toBeVisible();
-  await aside.getByRole("button", { name: "Accept suggested category" }).click();
-  await expect(aside.getByText("Accepted")).toBeVisible();
-  await aside.getByRole("button", { name: "Use draft" }).click();
-  await expect(page.getByRole("textbox", { name: "Reply" })).toHaveValue(/Thanks for getting in touch about your bill/);
+  // Manual triage: category and priority, then mark it triaged.
+  await expect(page.getByRole("combobox", { name: "Status" })).toHaveText(/New/);
+  await chooseField(page, "Category", /^Billing$/);
+  await expect(page.getByRole("combobox", { name: "Category" })).toHaveText(/Billing/);
+  await chooseField(page, "Priority", /High priority/);
+  await expect(page.getByRole("combobox", { name: "Priority" })).toHaveText(/High priority/);
+  await chooseStatus(page, /Move to triaged/);
+  await expect(page.getByRole("combobox", { name: "Status" })).toHaveText(/Triaged/);
 
   // Open needs an assignee: the option is guarded until someone takes it.
   await page.getByRole("combobox", { name: "Status" }).click();
@@ -91,7 +99,8 @@ test("agent walks a ticket through the full lifecycle in the UI, internal note s
   await expect(page.getByRole("combobox", { name: "Status" })).toHaveText(/Open/);
   await chooseStatus(page, /Move to in progress/);
 
-  // Public reply (the draft), then an internal note.
+  // A public reply, then an internal note.
+  await page.getByRole("textbox", { name: "Reply" }).fill("Thanks for getting in touch about your bill. I'm refunding the duplicate charge now.");
   await page.getByRole("button", { name: "Send reply" }).click();
   await expect(page.getByRole("list", { name: "Conversation" }).getByText(/Thanks for getting in touch about your bill/)).toBeVisible();
   await page.getByRole("button", { name: "Internal note" }).click();
@@ -112,9 +121,10 @@ test("agent walks a ticket through the full lifecycle in the UI, internal note s
   await chooseStatus(page, /Move to closed/);
   await expect(page.getByRole("combobox", { name: "Status" })).toHaveText(/Closed/);
 
-  // History has one entry per change, including the system's triage.
+  // History has one entry per change, including the manual triage.
   await aside.getByRole("button", { name: /History/ }).click();
-  await expect(aside.getByText("System ran AI triage")).toBeVisible();
+  await expect(aside.getByText("Category Billing")).toBeVisible();
+  await expect(aside.getByText("Status Triaged")).toBeVisible();
 
   // The customer never sees the internal note (API and UI).
   const asCustomer = await customer.get(`/tickets/${id}`);

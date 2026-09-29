@@ -9,7 +9,7 @@ import type {
   Category,
   CommentCreateResult,
   KbArticle,
-  KbSearchResult,
+  KbSearch,
   TicketDetailPublic,
   TicketList,
 } from "./types";
@@ -40,7 +40,7 @@ export const MIN_QUERY = 2;
 export function useKbSearch(q: string) {
   return useQuery({
     queryKey: keys.kb(q),
-    queryFn: ({ signal }) => api<KbSearchResult>(`/kb/search?q=${encodeURIComponent(q)}`, { signal }),
+    queryFn: ({ signal }) => api<KbSearch>(`/kb/search?q=${encodeURIComponent(q)}`, { signal }),
     enabled: q.trim().length >= MIN_QUERY,
     staleTime: 5 * 60_000,
     retry: false,
@@ -134,14 +134,6 @@ export function usePatchTicket(id: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patch: TicketPatch) => api<TicketDetail>(`/tickets/${id}`, { method: "PATCH", body: patch }),
-    onSuccess: (ticket) => writeTicket(qc, id, ticket),
-  });
-}
-
-export function useRerunTriage(id: number) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => api<TicketDetail>(`/tickets/${id}/ai-triage`, { method: "POST" }),
     onSuccess: (ticket) => writeTicket(qc, id, ticket),
   });
 }

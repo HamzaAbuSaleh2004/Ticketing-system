@@ -3,12 +3,12 @@ from datetime import UTC, datetime, timedelta
 import pytest_asyncio
 from sqlalchemy import select
 
-from app.auth.security import hash_password
-from app.models import AuditLog, Ticket, User
+from app.models import AuditLog, Ticket
 from app.models.enums import TicketPriority, TicketStatus, UserRole
 from tests.helpers import (
     auth,
     create_agent,
+    create_user,
     freeze,
     login,
     register,
@@ -28,8 +28,7 @@ async def _reference_data(db_session):
 
 
 async def _admin(client, db_session) -> str:
-    db_session.add(User(email="boss@example.com", name="Boss", role=UserRole.admin, password_hash=hash_password("Secret123!")))
-    await db_session.commit()
+    await create_user(db_session, email="boss@example.com", name="Boss", role=UserRole.admin)
     return await login(client, "boss@example.com")
 
 

@@ -7,7 +7,6 @@ from sqlalchemy import ColumnElement, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 
-from app.ai import get_ai_provider
 from app.auth.dependencies import current_user, require_role
 from app.config import get_settings
 from app.db import get_db
@@ -26,7 +25,6 @@ from app.domain.sla import (
     leave_pending,
     mark_first_response,
 )
-from app.events.bus import get_event_bus
 from app.models import Attachment, AuditLog, Category, Ticket, TicketComment, User
 from app.models.enums import TicketPriority, TicketStatus, UserRole
 from app.schemas.ticket import (
@@ -45,7 +43,6 @@ from app.schemas.ticket import (
     TicketQueueResponse,
 )
 from app.services.tickets import escalate, get_policy, lock_ticket, set_priority
-from app.services.triage import record_ai_field_decisions, triage_ticket
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
@@ -173,7 +170,6 @@ async def _build_ticket_detail(
     return TicketDetail(
         **public.model_dump(),
         sla_paused_total_seconds=ticket.sla_paused_total_seconds,
-        ai_triage=ticket.ai_triage,
         requester_name=requester.name,
         requester_email=requester.email,
         assignee_name=assignee.name if assignee else None,
@@ -209,8 +205,8 @@ async def create_ticket(
     session: AsyncSession = Depends(get_db),
 ) -> TicketDetail | TicketDetailPublic:
     now = clock.now()
-    # Every new ticket starts at the default priority; AI triage (worker, on
-    # the ticket.created event) then applies its category/priority.
+    # Every new ticket starts at the default priority; an agent triages it by
+    # hand (category, priority, then new -> triaged).
     policy = await get_policy(session, TicketPriority.normal)
     response_due, resolution_due = compute_due_dates(
         now, response_minutes=policy.response_minutes, resolution_minutes=policy.resolution_minutes
@@ -239,9 +235,6 @@ async def create_ticket(
     )
     await session.commit()
     await session.refresh(ticket)
-
-    await get_event_bus().publish("ticket.created", {"ticket_id": ticket.id})
-
     return await _build_ticket_detail(session, ticket, user)
 
 
@@ -363,31 +356,6 @@ async def patch_ticket(
     before: dict = {}
     after: dict = {}
 
-    # AI triage accept/override bookkeeping. Direct category/priority edits
-    # count as accepted when they match the suggestion, overridden otherwise.
-    suggestion = (ticket.ai_triage or {}).get("suggestion")
-    ai_accept = changes.pop("ai_accept", None) or []
-    if ai_accept and suggestion is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="This ticket has no AI triage to accept")
-    decisions: dict[str, str] = {}
-    for field in ai_accept:
-        decisions[field] = "accepted"
-        if field in ("category", "priority"):
-            if field in changes and changes[field] != suggestion[field]:
-                raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail=f"{field} conflicts with accepting the AI suggestion",
-                )
-            changes[field] = suggestion[field] if field == "category" else TicketPriority(suggestion[field])
-        elif field == "one_line_summary" and ticket.ai_summary != suggestion["one_line_summary"]:
-            before["ai_summary"], after["ai_summary"] = ticket.ai_summary, suggestion["one_line_summary"]
-            ticket.ai_summary = suggestion["one_line_summary"]
-    if suggestion is not None:
-        for field in ("category", "priority"):
-            if field in changes and field not in decisions and changes[field] is not None:
-                value = changes[field].value if field == "priority" else changes[field]
-                decisions[field] = "accepted" if value == suggestion[field] else "overridden"
-
     if changes.pop("escalate", None):
         if not can_escalate(ticket.status):
             raise HTTPException(
@@ -399,7 +367,6 @@ async def patch_ticket(
         # Escalation owns priority and assignee in this request.
         changes.pop("priority", None)
         changes.pop("assignee_id", None)
-        decisions.pop("priority", None)
 
     if changes.get("priority") is not None and changes["priority"] != ticket.priority:
         before["priority"] = ticket.priority.value
@@ -466,10 +433,6 @@ async def patch_ticket(
         ticket.status = target
         after["status"] = ticket.status.value
 
-    decision_diff = record_ai_field_decisions(ticket, decisions)
-    if decision_diff is not None:
-        before["ai_accepted_fields"], after["ai_accepted_fields"] = decision_diff
-
     if not before:
         # Every field in the request already matched the current value. Commit
         # (not rollback, which would expire `ticket`) just to release the lock.
@@ -486,17 +449,6 @@ async def patch_ticket(
     )
     await session.commit()
     await session.refresh(ticket)
-    return await _build_ticket_detail(session, ticket, user)
-
-
-@router.post("/{ticket_id}/ai-triage", response_model=TicketDetail)
-async def rerun_ai_triage(
-    ticket_id: int,
-    user: User = Depends(require_role(*_AGENT_ROLES)),
-    session: AsyncSession = Depends(get_db),
-) -> TicketDetail:
-    await _get_ticket_or_404(session, ticket_id, user)
-    ticket = await triage_ticket(session, ticket_id, get_ai_provider(), actor_id=user.id, force=True)
     return await _build_ticket_detail(session, ticket, user)
 
 
@@ -551,7 +503,6 @@ async def create_comment(
             )
             await session.commit()
             await session.refresh(follow_up)
-            await get_event_bus().publish("ticket.created", {"ticket_id": follow_up.id})
             return CommentCreateResult(follow_up_ticket_id=follow_up.id)
 
         if outcome == "reopen":

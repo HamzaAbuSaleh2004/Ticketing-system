@@ -2,7 +2,7 @@
 
 Runs against a real Postgres database (`ticketing_test`, on the same server
 as the dev `ticketing` database — see docker-compose's `db` service), not
-mocks or SQLite, so async SQLAlchemy + pgvector behave exactly as in prod.
+mocks or SQLite, so async SQLAlchemy and full-text search behave as in prod.
 The DATABASE_URL override below must happen before anything imports
 `app.db` (which builds the async engine at import time), so it's done here
 at module scope, before pytest imports any test module.
@@ -18,13 +18,6 @@ TEST_DATABASE_URL = f"{_base}/ticketing_test"
 MAINTENANCE_DATABASE_URL = f"{_base}/postgres".replace("+asyncpg", "")
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
-# Forced, not setdefault: an .env with AI_PROVIDER=gemini must never make
-# the test suite call the real API.
-os.environ["AI_PROVIDER"] = "fake"
-# A separate Redis DB, so events published by tests never reach the dev
-# stack's worker (which would try to triage a ticket id from the wrong DB).
-_redis_base, _, _ = os.environ.get("REDIS_URL", "redis://redis:6379/0").rpartition("/")
-os.environ["REDIS_URL"] = f"{_redis_base}/15"
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-prod-32-bytes-min")
 
 import asyncio

@@ -1,5 +1,7 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { shot, signIn } from "./helpers";
+import { enrollTwoStep, shot, signIn, signInPassword } from "./helpers";
+import { nextCode } from "./totp";
 
 for (const colorScheme of ["light", "dark"] as const) {
   test.describe(`${colorScheme} theme`, () => {
@@ -69,7 +71,7 @@ test("role-based redirect after sign-in and RoleGate", async ({ page }) => {
 });
 
 test("wrong password shows a clear error", async ({ page }) => {
-  await signIn(page, "user1@ticketing.demo", "not-the-password");
+  await signInPassword(page, "user1@ticketing.demo", "not-the-password");
   await expect(page.getByText("That email and password don't match an account.")).toBeVisible();
 });
 
@@ -80,5 +82,55 @@ test("register creates an end-user account and lands on the portal", async ({ pa
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("Password123!");
   await page.getByRole("button", { name: "Create account" }).click();
+  await enrollTwoStep(page);
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test("two-step verification: setup screens, a wrong code, and a recovery code", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const email = `twostep-${Date.now()}@example.com`;
+  await page.goto("/register");
+  await page.getByLabel("Name").fill("Sam Example");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill("Password123!");
+  await page.getByRole("button", { name: "Create account" }).click();
+
+  // Setup: QR code plus the manual key; a wrong code is refused.
+  await expect(page.getByRole("heading", { name: "Set up two-step verification" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "QR code for setting up two-step verification" })).toBeVisible();
+  await expect(page.getByLabel("Setup key")).not.toHaveText("…");
+  await shot(page, "phase-11", "setup-1280");
+  await page.setViewportSize({ width: 360, height: 800 });
+  await shot(page, "phase-11", "setup-360");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await shot(page, "phase-11", "setup-dark-360");
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  expect(axe.violations.map((v) => v.id), "setup screen axe").toEqual([]);
+  await page.getByLabel("6-digit code").fill("000000");
+  await page.getByRole("button", { name: "Turn on two-step verification" }).click();
+  await expect(page.getByText("That code isn't right. Try the current one.")).toBeVisible();
+
+  // The right code turns it on and shows the recovery codes once.
+  const secret = (await page.getByLabel("Setup key").innerText()).replace(/\s/g, "");
+  await page.getByLabel("6-digit code").fill(await nextCode(email, secret));
+  await page.getByRole("button", { name: "Turn on two-step verification" }).click();
+  const codes = page.getByRole("list", { name: "Recovery codes" }).getByRole("listitem");
+  await expect(codes).toHaveCount(10);
+  const recovery = await codes.first().innerText();
+  await shot(page, "phase-11", "recovery-codes-1280");
+  await page.getByRole("button", { name: "I've saved them, continue" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.getByRole("button", { name: /Account/ }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+
+  // Next sign-in asks for a code; a recovery code works instead.
+  await signInPassword(page, email, "Password123!");
+  await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
+  await shot(page, "phase-11", "verify-1280");
+  await page.getByRole("button", { name: "Use a recovery code instead" }).click();
+  await page.getByLabel("Recovery code").fill(recovery);
+  await page.getByRole("button", { name: "Verify" }).click();
   await expect(page).toHaveURL(/\/$/);
 });

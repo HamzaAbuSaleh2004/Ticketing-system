@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { signIn } from "./helpers";
+import { SEED_PASSWORD, enterCode, signInPassword } from "./helpers";
 
 async function scan(page: Page, label: string) {
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
@@ -12,15 +12,19 @@ async function scan(page: Page, label: string) {
 for (const colorScheme of ["light", "dark"] as const) {
   test(`end-user screens have no axe violations (${colorScheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme });
-    await signIn(page, "user1@ticketing.demo");
+    // The second sign-in step is scanned too.
+    await signInPassword(page, "user1@ticketing.demo", SEED_PASSWORD);
+    await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
+    await scan(page, `two-step verify ${colorScheme}`);
+    await enterCode(page, "user1@ticketing.demo");
     await expect(page).toHaveURL(/\/$/);
     await scan(page, `home ${colorScheme}`);
 
     await page.getByRole("searchbox", { name: "Search help articles" }).fill("how do you protect my personal data");
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("region", { name: "Answer from our help articles" })).toBeVisible();
+    await expect(page.getByRole("region", { name: /help articles? match/ })).toBeVisible();
     await page.waitForTimeout(500);
-    await scan(page, `answer ${colorScheme}`);
+    await scan(page, `search results ${colorScheme}`);
 
     await page.goto("/requests/new");
     await scan(page, `new request ${colorScheme}`);

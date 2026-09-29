@@ -1,4 +1,4 @@
-import { Alert, Box, Button, MenuItem, Snackbar, Stack, Switch, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, TextField, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, MenuItem, Snackbar, Stack, Switch, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, TextField, Tooltip, Typography } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -8,6 +8,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { PRIORITY_SHORT, absoluteTime, relativeTime } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
 
+type AdminUser = User & { two_factor_enabled: boolean };
 type SlaPolicy = { id: number; name: string; priority: TicketPriority; response_minutes: number; resolution_minutes: number };
 type AdminAudit = { id: number; entity_type: string; entity_id: number; subject: string | null; actor_name: string | null; action: string; diff_json: { before?: Record<string, unknown>; after?: Record<string, unknown> } | null; created_at: string };
 
@@ -57,9 +58,10 @@ function useSave(onDone: (msg: string) => void, keys: string[][]) {
 
 function UsersTab({ notify }: { notify: (m: string) => void }) {
   const { user: me } = useAuth();
-  const users = useQuery({ queryKey: ["admin", "users"], queryFn: () => api<User[]>("/users") });
+  const users = useQuery({ queryKey: ["admin", "users"], queryFn: () => api<AdminUser[]>("/users") });
   const save = useSave(notify, [["admin", "users"], ["staff"]]);
   const patch = (u: User, body: Partial<User>, msg: string) => save.mutate({ path: `/users/${u.id}`, method: "PATCH", body, msg });
+  const [resetting, setResetting] = useState<AdminUser | null>(null);
 
   return (
     <QueryState query={users}>
@@ -70,6 +72,7 @@ function UsersTab({ notify }: { notify: (m: string) => void }) {
           <TableCell>Email</TableCell>
           <TableCell sx={{ width: 180 }}>Role</TableCell>
           <TableCell sx={{ width: 160 }}>Team</TableCell>
+          <TableCell sx={{ width: 220 }}>Two-step verification</TableCell>
         </TableRow>
       </TableHead>
       <TableBody>
@@ -123,11 +126,46 @@ function UsersTab({ notify }: { notify: (m: string) => void }) {
                   </Typography>
                 )}
               </TableCell>
+              <TableCell sx={cellSx}>
+                <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                  <Typography variant="bodyMedium" sx={{ color: u.two_factor_enabled ? sys("onSurface") : sys("onSurfaceVariant") }}>
+                    {u.two_factor_enabled ? "On" : "Not set up yet"}
+                  </Typography>
+                  {u.two_factor_enabled && !self ? (
+                    <Button size="small" disabled={save.isPending} onClick={() => setResetting(u)} aria-label={`Reset two-step verification for ${u.name}`}>
+                      Reset
+                    </Button>
+                  ) : null}
+                </Stack>
+              </TableCell>
             </TableRow>
           );
         })}
       </TableBody>
     </Table>
+    <Dialog open={resetting !== null} onClose={() => setResetting(null)} aria-labelledby="reset-2fa-title">
+      <DialogTitle id="reset-2fa-title">Reset two-step verification for {resetting?.name}?</DialogTitle>
+      <DialogContent>
+        <DialogContentText>
+          Do this only when they've lost their authenticator and recovery codes, and you've confirmed it's really them.
+          They'll be signed out everywhere and set up a new authenticator next time they sign in.
+        </DialogContentText>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setResetting(null)}>Cancel</Button>
+        <Button
+          variant="contained"
+          onClick={() => {
+            if (resetting) {
+              save.mutate({ path: `/users/${resetting.id}/reset-2fa`, method: "POST", body: undefined, msg: `Two-step verification reset for ${resetting.name}` });
+            }
+            setResetting(null);
+          }}
+        >
+          Reset
+        </Button>
+      </DialogActions>
+    </Dialog>
     </QueryState>
   );
 }
@@ -287,6 +325,13 @@ const FIELD_LABEL: Record<string, string> = {
   resolution_minutes: "Resolve (min)",
 };
 
+// Sign-in security events: a fixed sentence rather than a field diff.
+const ACTION_TEXT: Record<string, (d: AdminAudit["diff_json"]) => string> = {
+  "user.2fa_enabled": () => "Turned on two-step verification",
+  "user.2fa_reset": () => "Two-step verification reset",
+  "user.recovery_code_used": (d) => `Signed in with a recovery code, ${(d as { remaining?: number } | null)?.remaining ?? 0} left`,
+};
+
 function show(value: unknown): string {
   if (value === null || value === undefined) return "none";
   if (typeof value === "boolean") return value ? "yes" : "no";
@@ -295,7 +340,9 @@ function show(value: unknown): string {
 }
 
 /** "Role Agent to End user, Team Tier 1 to none". */
-export function describeChange(a: Pick<AdminAudit, "diff_json">): string {
+export function describeChange(a: Pick<AdminAudit, "diff_json"> & { action?: string }): string {
+  const fixed = a.action ? ACTION_TEXT[a.action] : undefined;
+  if (fixed) return fixed(a.diff_json);
   const before = a.diff_json?.before ?? {};
   const after = a.diff_json?.after ?? {};
   return Object.entries(after)

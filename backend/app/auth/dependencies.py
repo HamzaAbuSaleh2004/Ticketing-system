@@ -24,7 +24,13 @@ async def current_user(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token") from exc
 
     user = await session.scalar(select(User).where(User.id == int(payload["sub"])))
-    if user is None:
+    # Access tokens are only issued after 2FA, so one for an account whose
+    # 2FA was since reset, or issued before its current enrolment, is dead.
+    if (
+        user is None
+        or user.totp_enabled_at is None
+        or payload["iat"] < int(user.totp_enabled_at.timestamp())
+    ):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
     return user
 

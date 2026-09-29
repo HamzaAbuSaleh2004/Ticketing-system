@@ -4,7 +4,9 @@ import { defineConfig, devices } from "@playwright/test";
 // separately started dev server.
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 60_000,
+  // A demo account's code works once per 30 s step, so a burst of sign-ins
+  // to one account can wait up to 30 s for the next step (e2e/totp.ts).
+  timeout: 120_000,
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],

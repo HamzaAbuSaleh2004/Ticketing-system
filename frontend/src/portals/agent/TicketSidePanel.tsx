@@ -7,7 +7,6 @@ import { SlaIndicator } from "../../components/SlaIndicator";
 import { statusHint, statusOptions } from "../../lib/lifecycle";
 import { PRIORITY_LABEL, STATUS_LABEL, absoluteTime } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
-import { AiTriagePanel } from "./AiTriagePanel";
 import { AuditTrail } from "./AuditTrail";
 
 const PRIORITIES: TicketPriority[] = ["urgent", "high", "normal", "low"];
@@ -30,16 +29,10 @@ export function TicketSidePanel({
   ticket,
   onPatch,
   patching,
-  onUseDraft,
-  onRerun,
-  rerunning,
 }: {
   ticket: TicketDetail;
   onPatch: (p: TicketPatch) => void;
   patching: boolean;
-  onUseDraft: (draft: string) => void;
-  onRerun: () => void;
-  rerunning: boolean;
 }) {
   const { user } = useAuth();
   const staff = useStaff();
@@ -178,18 +171,6 @@ export function TicketSidePanel({
           </Typography>
         </Box>
       </Stack>
-
-      <Divider />
-
-      <AiTriagePanel
-        ticket={ticket}
-        categoryName={categoryName}
-        onPatch={onPatch}
-        onUseDraft={onUseDraft}
-        onRerun={onRerun}
-        busy={patching}
-        rerunning={rerunning}
-      />
 
       <Divider />
 

@@ -15,6 +15,11 @@ export type TokenResponse = {
   user: User;
 };
 
+/** The password step's answer: a code (or first-time setup) comes next. */
+export type MfaChallenge = { mfa_token: string; mfa: "enroll" | "verify" };
+export type MfaSetup = { secret: string; otpauth_uri: string; qr_svg_data_uri: string };
+export type MfaEnabled = TokenResponse & { recovery_codes: string[] };
+
 export type TicketStatus = "new" | "triaged" | "open" | "in_progress" | "pending" | "resolved" | "closed";
 export type TicketPriority = "low" | "normal" | "high" | "urgent";
 
@@ -29,7 +34,6 @@ export type TicketListItem = {
   requester_id: number;
   assignee_id: number | null;
   escalated: boolean;
-  ai_summary: string | null;
   sla_response_due: string | null;
   sla_resolution_due: string | null;
   created_at: string;
@@ -88,19 +92,8 @@ export type AuditEntry = {
   created_at: string;
 };
 
-export type TriageField = "category" | "priority" | "one_line_summary" | "suggested_response_draft";
-export type FieldDecision = "auto" | "accepted" | "overridden";
-
-export type AiTriage = {
-  suggestion: { category: string; priority: TicketPriority; one_line_summary: string; suggested_response_draft: string };
-  model: string;
-  generated_at: string;
-  accepted_fields: Partial<Record<TriageField, FieldDecision>>;
-};
-
 export type TicketDetail = TicketDetailPublic & {
   sla_paused_total_seconds: number;
-  ai_triage: AiTriage | null;
   requester_name: string;
   requester_email: string;
   assignee_name: string | null;
@@ -114,11 +107,10 @@ export type TicketPatch = Partial<{
   priority: TicketPriority;
   category: string | null;
   escalate: boolean;
-  ai_accept: TriageField[];
 }>;
 
 export type CommentCreateResult = { comment: Comment | null; follow_up_ticket_id: number | null };
 
-export type KbSource = { id: number; title: string; slug: string; snippet: string };
-export type KbSearchResult = { answer: string | null; sources: KbSource[] };
+export type KbResult = { id: number; title: string; slug: string; snippet: string };
+export type KbSearch = { results: KbResult[] };
 export type KbArticle = { id: number; title: string; slug: string; body: string; tags: string[]; updated_at: string };

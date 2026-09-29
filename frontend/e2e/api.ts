@@ -1,5 +1,6 @@
 import { expect, request, type APIRequestContext } from "@playwright/test";
 import { SEED_PASSWORD } from "./helpers";
+import { withCode } from "./totp";
 
 const API = process.env.E2E_API_URL ?? "http://localhost:8000";
 
@@ -16,7 +17,15 @@ export async function apiAs(email: string, password = SEED_PASSWORD): Promise<Ap
   const ctx = await request.newContext({ baseURL: API });
   const login = await ctx.post("/auth/login", { data: { email, password } });
   expect(login.ok(), `login ${email}`).toBeTruthy();
-  const { access_token, user } = await login.json();
+  const { mfa_token } = await login.json();
+  let verified: { access_token: string; user: { id: number } } | undefined;
+  await withCode(email, async (code) => {
+    const verify = await ctx.post("/auth/2fa/verify", { data: { mfa_token, code } });
+    expect([200, 401], `2fa ${email} → ${verify.status()} ${await verify.text()}`).toContain(verify.status());
+    if (verify.ok()) verified = await verify.json();
+    return verify.ok();
+  });
+  const { access_token, user } = verified!;
   const headers = { Authorization: `Bearer ${access_token}` };
   const json = async (r: Awaited<ReturnType<APIRequestContext["get"]>>) => {
     expect(r.ok(), `${r.url()} → ${r.status()} ${await r.text()}`).toBeTruthy();
@@ -32,11 +41,7 @@ export async function apiAs(email: string, password = SEED_PASSWORD): Promise<Ap
   };
 }
 
-export async function waitForTriage(as: ApiUser, id: number): Promise<any> {
-  for (let i = 0; i < 40; i++) {
-    const t = await as.get(`/tickets/${id}`);
-    if (t.status !== "new") return t;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error(`ticket ${id} was never triaged`);
+/** Triage is manual: an agent sets category and priority, then marks it triaged. */
+export async function triage(agent: ApiUser, id: number, fields: { category: string; priority: string }): Promise<any> {
+  return agent.patch(`/tickets/${id}`, { ...fields, status: "triaged" });
 }

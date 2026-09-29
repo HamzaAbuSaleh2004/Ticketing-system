@@ -2,9 +2,11 @@ import { Alert, Box, Button, Link, Stack, TextField, Typography } from "@mui/mat
 import { useState, type FormEvent } from "react";
 import { Link as RouterLink, Navigate, useNavigate } from "react-router-dom";
 import { ApiError, errorMessage } from "../api/client";
+import type { MfaChallenge } from "../api/types";
 import { sys } from "../theme/scheme";
 import { homeFor, useAuth } from "./AuthContext";
 import { AuthLayout } from "./AuthLayout";
+import { TwoStep } from "./TwoStep";
 
 const MIN_PASSWORD = 8;
 
@@ -17,8 +19,19 @@ export function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [challenge, setChallenge] = useState<MfaChallenge | null>(null);
 
   if (user) return <Navigate to={homeFor(user.role)} replace />;
+  if (challenge) {
+    return (
+      <TwoStep
+        challenge={challenge}
+        onDone={(created) => navigate(homeFor(created.role), { replace: true })}
+        // The account exists now; if setup lapses, finish it by signing in.
+        onRestart={() => navigate("/login", { replace: true })}
+      />
+    );
+  }
 
   const passwordTooShort = (submitted || password.length > 0) && password.length < MIN_PASSWORD;
 
@@ -29,8 +42,7 @@ export function RegisterPage() {
     setBusy(true);
     setError(null);
     try {
-      const created = await register(name.trim(), email, password);
-      navigate(homeFor(created.role), { replace: true });
+      setChallenge(await register(name.trim(), email, password));
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 409

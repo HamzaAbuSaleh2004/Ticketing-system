@@ -1,7 +1,7 @@
 import ArrowBackOutlined from "@mui/icons-material/ArrowBackOutlined";
 import AttachFileOutlined from "@mui/icons-material/AttachFileOutlined";
-import { Alert, Box, Button, CircularProgress, Link, Skeleton, Snackbar, Stack, TextField, Typography } from "@mui/material";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Alert, Box, Button, Link, Skeleton, Snackbar, Stack, TextField, Typography } from "@mui/material";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import { errorMessage } from "../../api/client";
 import { useCategoryName, useReply, useTicket } from "../../api/hooks";
@@ -12,9 +12,6 @@ import { PRIORITY_LABEL, absoluteTime, relativeTime, replyMode, ticketRef } from
 import { sys } from "../../theme/scheme";
 import { typescale } from "../../theme/tokens";
 import { CustomerStatusChip } from "./CustomerStatusChip";
-
-const TRIAGE_POLL_MS = 3000;
-const TRIAGE_POLL_FOR_MS = 30_000;
 
 function InfoChip({ children }: { children: string }) {
   return (
@@ -67,18 +64,16 @@ function authorLabel(c: Comment, myId: number | undefined) {
   return c.author_role === "end_user" ? c.author_name : `${c.author_name.split(" ")[0]} from Support`;
 }
 
-function TriageNotice({ ticket, pollingStopped }: { ticket: TicketDetailPublic; pollingStopped: boolean }) {
+/** Until an agent has triaged it: what happens next, since nothing is automatic. */
+function ReceivedNotice({ ticket }: { ticket: TicketDetailPublic }) {
   if (ticket.status !== "new") return null;
   return (
     <Box
       role="status"
       sx={{ display: "flex", gap: 2, alignItems: "center", p: 2, mb: 3, borderRadius: "var(--md-sys-shape-corner-large)", bgcolor: sys("surfaceContainerLow") }}
     >
-      {pollingStopped ? null : <CircularProgress size={20} aria-hidden sx={{ color: sys("primary") }} />}
       <Typography variant="bodyMedium">
-        {pollingStopped
-          ? "We're still reviewing this. It's safe to leave; we'll reply here."
-          : "We're reviewing this and routing it to the right team."}
+        We've got your request. Someone from our team will review it and reply here. It's safe to leave this page.
       </Typography>
     </Box>
   );
@@ -154,21 +149,8 @@ export function RequestPage() {
   const navState = (location.state ?? {}) as { justCreated?: boolean; attachmentFailed?: boolean; followUpOf?: number };
   const categoryName = useCategoryName();
 
-  // Poll every 3s for up to 30s while triage hasn't landed yet; after that,
-  // refetch-on-focus (the query default) keeps it fresh.
-  const startedAt = useRef(Date.now());
-  const [pollingStopped, setPollingStopped] = useState(false);
-  const { data: ticket, isLoading, error } = useTicket(id, (t) =>
-    t?.status === "new" && !pollingStopped ? TRIAGE_POLL_MS : false,
-  );
-  const stillNew = ticket?.status === "new";
-
-  useEffect(() => {
-    if (!stillNew || pollingStopped) return;
-    const remaining = TRIAGE_POLL_FOR_MS - (Date.now() - startedAt.current);
-    const timer = window.setTimeout(() => setPollingStopped(true), Math.max(remaining, 0));
-    return () => window.clearTimeout(timer);
-  }, [stillNew, pollingStopped]);
+  // Refetch-on-focus (the query default) picks up the team's changes.
+  const { data: ticket, isLoading, error } = useTicket(id);
 
   // Router state survives reloads; clear it once read so the toast shows once.
   const navigate = useNavigate();
@@ -242,7 +224,7 @@ export function RequestPage() {
         </Typography>
       ) : null}
 
-      <TriageNotice ticket={ticket} pollingStopped={pollingStopped} />
+      <ReceivedNotice ticket={ticket} />
 
       <Box component="ol" aria-label="Conversation" sx={{ listStyle: "none", p: 0, m: 0, display: "grid", gap: 1.5 }}>
         <Message author="You" at={ticket.created_at} body={ticket.description} fromSupport={false} />

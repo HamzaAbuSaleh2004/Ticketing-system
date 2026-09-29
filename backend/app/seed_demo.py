@@ -30,18 +30,6 @@ def load_demo_file(path: str) -> list[dict]:
     return data["tickets"]
 
 
-def _ai_triage(t: dict, created: datetime) -> dict | None:
-    raw = t.get("ai_triage")
-    if not raw:
-        return None
-    return {
-        "suggestion": {k: raw[k] for k in ("category", "priority", "one_line_summary", "suggested_response_draft")},
-        "model": "demo-seed",
-        "generated_at": (created + timedelta(seconds=5)).isoformat(),
-        "accepted_fields": {field: "accepted" for field in raw.get("accepted_fields", [])},
-    }
-
-
 async def seed_demo_tickets(session: AsyncSession, path: str) -> int:
     if await session.scalar(select(func.count()).select_from(Ticket)):
         return 0
@@ -90,8 +78,6 @@ async def seed_demo_tickets(session: AsyncSession, path: str) -> int:
             sla_response_due=response_due,
             sla_resolution_due=resolution_due,
             escalated=bool(t.get("escalated")),
-            ai_summary=t.get("ai_summary"),
-            ai_triage=_ai_triage(t, created),
             parent_ticket_id=ids_by_ref[t["parent_ref"]] if t.get("parent_ref") else None,
             resolved_at=ago(t["resolved_minutes_ago"]) if "resolved_minutes_ago" in t else None,
             closed_at=ago(t["closed_minutes_ago"]) if "closed_minutes_ago" in t else None,
@@ -149,6 +135,5 @@ async def seed_demo_tickets(session: AsyncSession, path: str) -> int:
             .values(created_at=created)
         )
 
-    # No ticket.created events (step 7): the worker would re-triage them.
     await session.commit()
     return len(tickets)

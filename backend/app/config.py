@@ -5,8 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Central configuration. All env vars and Gemini model IDs live here —
-    never hardcode a Gemini model ID anywhere else."""
+    """Central configuration: every env var lives here."""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -18,35 +17,19 @@ class Settings(BaseSettings):
 
     # Infra
     DATABASE_URL: str = "postgresql+asyncpg://ticketing:ticketing@db:5432/ticketing"
-    REDIS_URL: str = "redis://redis:6379/0"
 
-    # AI provider
-    # "auto" uses Gemini when GEMINI_API_KEY is set and the fake otherwise;
-    # "gemini" without a key also falls back to the fake (with a warning), so
-    # the stack always runs with no .env.
-    AI_PROVIDER: Literal["auto", "gemini", "fake"] = "auto"
-    GEMINI_API_KEY: str | None = None
-    GEMINI_API_BASE: str = "https://generativelanguage.googleapis.com/v1beta"
-    GEMINI_TIMEOUT_SECONDS: float = 20.0
-    GEMINI_MAX_RETRIES: int = 2
-    GEMINI_RETRY_BACKOFF_SECONDS: float = 0.5
-    # KB search calls Gemini inline on a user's request, so it gets a much
-    # smaller budget than the worker's triage before falling back/failing.
-    GEMINI_INTERACTIVE_TIMEOUT_SECONDS: float = 8.0
-    GEMINI_INTERACTIVE_MAX_RETRIES: int = 1
-    GEMINI_TRIAGE_MODEL: str = "gemini-3.6-flash"
-    GEMINI_ANSWER_MODEL: str = "gemini-3.6-flash"
-    GEMINI_EMBED_MODEL: str = "gemini-embedding-001"
-    EMBED_DIM: int = 768
+    # Two-factor authentication (TOTP, mandatory for every account)
+    TOTP_ISSUER: str = "LiverX Help Desk"
+    # The password step's short-lived token, exchanged for an access token
+    # once the code is verified (or 2FA is enrolled).
+    MFA_TOKEN_EXPIRES_MINUTES: int = 5
+    MFA_MAX_FAILED_ATTEMPTS: int = 5
+    MFA_LOCKOUT_MINUTES: int = 15
+    MFA_RECOVERY_CODE_COUNT: int = 10
 
     # Domain config
     RESOLVED_COOLOFF_HOURS: int = 72
-    # Cosine similarity of the best KB hit below which search returns "no
-    # answer". The fake's feature-hash vectors score much lower than real
-    # embeddings for the same relevance, so it gets its own threshold.
-    KB_SIMILARITY_THRESHOLD: float = 0.5
-    KB_SIMILARITY_THRESHOLD_FAKE: float = 0.06
-    KB_SEARCH_TOP_K: int = 4
+    KB_SEARCH_LIMIT: int = 5
 
     # Worker
     SWEEP_INTERVAL_SECONDS: int = 60
@@ -72,10 +55,6 @@ class Settings(BaseSettings):
     @property
     def seed_demo(self) -> bool:
         return self.ENV == "local" if self.SEED_DEMO is None else self.SEED_DEMO
-
-    @property
-    def use_gemini(self) -> bool:
-        return self.AI_PROVIDER != "fake" and bool(self.GEMINI_API_KEY)
 
 
 @lru_cache
