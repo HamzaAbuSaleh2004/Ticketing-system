@@ -11,13 +11,13 @@
 - **Stop and ask only when you're blocked:**
   - a Verify step fails and you can't fix it;
   - a §0 decision looks wrong;
-  - you need something only the user has: the LiverX logo or brand colour (Phase 14), the GCP project, billing, region or `gcloud auth login` (Phase 16), or consent for anything billable or outward-facing.
+  - you need something only the user has: the GCP project, billing, region or `gcloud auth login` (Phase 16), or consent for anything billable or outward-facing.
 
   Never tick a box or claim a pass you didn't observe.
 - Locked stack: FastAPI + Postgres + React/Vite/TS + MUI themed to M3, with mandatory TOTP 2FA for every account.
   - No AI features, no Redis, no pgvector.
-  - Type: Google Sans Flex (display) and Roboto Flex (body, and data with tabular figures). No monospace.
-  - The seed colour is `#1E6A5E` until Phase 14 replaces it with the LiverX brand colour.
+  - Type: Google Sans Flex (display) and Roboto Flex (body) until Phase 14 switches to the LiverX brand fonts: IBM Plex Sans, with Tajawal for Arabic. Tabular figures for data, no monospace.
+  - The seed colour is `#1E6A5E` until Phase 14 replaces it with LiverX cyan `#00A4D8` (the brand guideline is in `docs/brand/`).
   - Every `Button` uses the same filled primary colour (the user's rule, Phase 14).
   - Don't change any of these without asking.
 - Before any UI work, load **both** `material-3` and `frontend-design` (in [.claude/skills/](.claude/skills/)). Precedence: brief (as amended) > `material-3` > `frontend-design`. Before any chart, load `dataviz`. Before calling anything done, take screenshots and critique them, and pass the `material-3` audit (≥ 7/10 per category) as described in PLAN.md §0.
