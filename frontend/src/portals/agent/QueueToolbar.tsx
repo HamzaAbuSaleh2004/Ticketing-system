@@ -1,7 +1,7 @@
 import SearchOutlined from "@mui/icons-material/SearchOutlined";
 import { Box, InputAdornment, Stack, TextField, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
-import { useCategories, useStaff } from "../../api/hooks";
+import { useCategories, useOrganizations, useStaff } from "../../api/hooks";
 import type { TicketPriority, TicketStatus } from "../../api/types";
 import { STATUS_LABEL } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
@@ -22,6 +22,7 @@ export function QueueToolbar({
 }) {
   const staff = useStaff();
   const categories = useCategories();
+  const organizations = useOrganizations();
   const [q, setQ] = useState(filters.q);
   useEffect(() => {
     setQ(filters.q);
@@ -101,6 +102,16 @@ export function QueueToolbar({
           value={filters.category}
           options={[{ value: null, label: "Any category" }, ...(categories.data ?? []).map((c) => ({ value: c.slug, label: c.name }))]}
           onChange={(v) => onChange({ category: v, page: 1 })}
+        />
+        <FilterChip
+          label="Organisation"
+          value={filters.organization}
+          options={[
+            { value: null, label: "Any organisation" },
+            { value: "none", label: "No organisation" },
+            ...(organizations.data ?? []).map((o) => ({ value: String(o.id), label: o.name })),
+          ]}
+          onChange={(v) => onChange({ organization: v, page: 1 })}
         />
       </Stack>
     </Box>

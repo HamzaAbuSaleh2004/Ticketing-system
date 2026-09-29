@@ -25,6 +25,22 @@ export type TicketPriority = "low" | "normal" | "high" | "urgent";
 
 export type Category = { id: number; name: string; slug: string; active: boolean };
 
+export type OrganizationKind = "company" | "government";
+export type Organization = { id: number; name: string; kind: OrganizationKind; active: boolean };
+
+export type ActionItemSide = "customer" | "liverx";
+export type ActionItem = {
+  id: number;
+  side: ActionItemSide;
+  description: string;
+  done: boolean;
+  created_by: number;
+  created_at: string;
+  done_at: string | null;
+  done_by: number | null;
+  done_by_name: string | null;
+};
+
 export type TicketListItem = {
   id: number;
   subject: string;
@@ -38,6 +54,11 @@ export type TicketListItem = {
   sla_resolution_due: string | null;
   created_at: string;
   updated_at: string;
+  organization_id: number | null;
+  organization_name: string | null;
+  organization_kind: OrganizationKind | null;
+  open_customer_items: number;
+  open_liverx_items: number;
 };
 
 export type TicketList = { items: TicketListItem[]; total: number; page: number; page_size: number };
@@ -71,6 +92,7 @@ export type TicketDetailPublic = TicketListItem & {
   reopen_until: string | null;
   comments: Comment[];
   attachments: Attachment[];
+  action_items: ActionItem[];
 };
 
 export type TicketQueueItem = TicketListItem & {
@@ -106,6 +128,7 @@ export type TicketPatch = Partial<{
   assignee_id: number | null;
   priority: TicketPriority;
   category: string | null;
+  organization_id: number | null;
   escalate: boolean;
 }>;
 

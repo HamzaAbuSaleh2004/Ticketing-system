@@ -3,8 +3,8 @@ from datetime import UTC, datetime, timedelta
 import pytest_asyncio
 from sqlalchemy import select
 
-from app.models import AuditLog, Ticket
-from app.models.enums import TicketPriority, TicketStatus, UserRole
+from app.models import AuditLog, Organization, Ticket
+from app.models.enums import OrganizationKind, TicketPriority, TicketStatus, UserRole
 from tests.helpers import (
     auth,
     create_agent,
@@ -32,7 +32,7 @@ async def _admin(client, db_session) -> str:
     return await login(client, "boss@example.com")
 
 
-async def _dataset(db_session, requester_id: int) -> None:
+async def _dataset(db_session, requester_id: int, org_a_id: int, org_b_id: int) -> None:
     """Hand-computed expectations are in the test below."""
     def ticket(**f) -> Ticket:
         base = {"subject": "s", "description": "d", "priority": TicketPriority.normal, "requester_id": requester_id}
@@ -46,15 +46,17 @@ async def _dataset(db_session, requester_id: int) -> None:
         # T2: replied in 20m (response breached); resolved after 24h (resolution breached).
         ticket(status=TicketStatus.resolved, created_at=at(1, 10), first_responded_at=at(1, 10, 20),
                sla_response_due=at(1, 10, 15), resolved_at=at(2, 10), sla_resolution_due=at(1, 14)),
-        # T3: replied in 1h; still running past its resolution due -> resolution breached.
+        # T3: replied in 1h; still running past its resolution due -> resolution breached. Org A.
         ticket(status=TicketStatus.in_progress, created_at=at(2, 8), first_responded_at=at(2, 9),
-               sla_response_due=at(2, 12), sla_resolution_due=at(3, 8)),
-        # T4: never replied, both clocks past due -> both breached.
-        ticket(status=TicketStatus.new, created_at=at(3, 8), sla_response_due=at(3, 8, 15), sla_resolution_due=at(4, 8)),
-        # T5: replied in 5m; paused before its resolution due -> not breached although "now" is later.
+               sla_response_due=at(2, 12), sla_resolution_due=at(3, 8), organization_id=org_a_id),
+        # T4: never replied, both clocks past due -> both breached. Org B.
+        ticket(status=TicketStatus.new, created_at=at(3, 8), sla_response_due=at(3, 8, 15), sla_resolution_due=at(4, 8),
+               organization_id=org_b_id),
+        # T5: replied in 5m; paused before its resolution due -> not breached although "now" is later. Org A.
         ticket(status=TicketStatus.pending, created_at=at(3, 9), first_responded_at=at(3, 9, 5),
-               sla_response_due=at(3, 9, 15), sla_resolution_due=at(3, 17), sla_paused_at=at(3, 10)),
-        # T6: outside the window; only counts toward the current backlog.
+               sla_response_due=at(3, 9, 15), sla_resolution_due=at(3, 17), sla_paused_at=at(3, 10),
+               organization_id=org_a_id),
+        # T6: outside the window; only counts toward the current backlog. No organisation.
         ticket(status=TicketStatus.open, created_at=datetime(2026, 5, 20, 9, tzinfo=UTC),
                sla_response_due=datetime(2026, 5, 20, 13, tzinfo=UTC), sla_resolution_due=datetime(2026, 5, 21, 9, tzinfo=UTC),
                first_responded_at=datetime(2026, 5, 20, 9, 30, tzinfo=UTC)),
@@ -66,7 +68,11 @@ async def test_analytics_summary_math_on_a_fixed_dataset(client, db_session, mon
     freeze(monkeypatch, NOW)
     user_token = await register(client, "analytics-user@example.com")
     requester_id = (await client.get("/auth/me", headers=auth(user_token))).json()["id"]
-    await _dataset(db_session, requester_id)
+    org_a = Organization(name="Acme Corp", kind=OrganizationKind.company)
+    org_b = Organization(name="Ministry of Roads", kind=OrganizationKind.government)
+    db_session.add_all([org_a, org_b])
+    await db_session.commit()
+    await _dataset(db_session, requester_id, org_a.id, org_b.id)
     await create_agent(db_session, email="analytics-agent@example.com")
     agent_token = await login(client, "analytics-agent@example.com")
 
@@ -82,6 +88,12 @@ async def test_analytics_summary_math_on_a_fixed_dataset(client, db_session, mon
     assert s["resolution"] == {"median_seconds": 48600.0, "avg_seconds": 48600.0, "count": 2}
     assert {b["status"]: b["count"] for b in s["backlog"]} == {"new": 1, "triaged": 0, "open": 1, "in_progress": 1, "pending": 1}
     assert s["sla_breaches"] == {"total": 3, "response": 2, "resolution": 3}
+    # Backlog by organisation: Org A has T3+T5 (in_progress+pending), Org B
+    # has T4 (new), and T6 (open) has no organisation - always present even
+    # though a busy top 10 could otherwise push it out.
+    assert [(o["name"], o["count"]) for o in s["backlog_by_organization"]] == [
+        ("Acme Corp", 2), ("Ministry of Roads", 1), ("No organisation", 1),
+    ]
 
     # Default range: the 30 days ending today (frozen clock), zero-filled.
     default = (await client.get("/analytics/summary", headers=auth(agent_token))).json()

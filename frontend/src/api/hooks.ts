@@ -1,6 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./client";
 import type {
+  ActionItem,
+  ActionItemSide,
   Attachment,
   TicketDetail,
   TicketPatch,
@@ -10,6 +12,7 @@ import type {
   CommentCreateResult,
   KbArticle,
   KbSearch,
+  Organization,
   TicketDetailPublic,
   TicketList,
 } from "./types";
@@ -20,7 +23,16 @@ export const keys = {
   kb: (q: string) => ["kb", q] as const,
   article: (slug: string) => ["kb-article", slug] as const,
   categories: ["categories"] as const,
+  organizations: ["organizations"] as const,
 };
+
+export function useOrganizations() {
+  return useQuery({
+    queryKey: keys.organizations,
+    queryFn: () => api<Organization[]>("/organizations"),
+    staleTime: 5 * 60_000,
+  });
+}
 
 export function useCategories() {
   return useQuery({
@@ -142,4 +154,36 @@ export function uploadAttachment(ticketId: number, file: File) {
   const form = new FormData();
   form.append("file", file);
   return api<Attachment>(`/tickets/${ticketId}/attachments`, { method: "POST", form });
+}
+
+/** Refetches the ticket detail: action items live inside it, and there's no
+ * separate list endpoint to patch in place. */
+function invalidateTicket(qc: ReturnType<typeof useQueryClient>, ticketId: number) {
+  qc.invalidateQueries({ queryKey: keys.ticket(ticketId) });
+}
+
+export function useCreateActionItem(ticketId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { side: ActionItemSide; description: string }) =>
+      api<ActionItem>(`/tickets/${ticketId}/action-items`, { method: "POST", body }),
+    onSuccess: () => invalidateTicket(qc, ticketId),
+  });
+}
+
+export function usePatchActionItem(ticketId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: number; done?: boolean; description?: string }) =>
+      api<ActionItem>(`/tickets/${ticketId}/action-items/${id}`, { method: "PATCH", body }),
+    onSuccess: () => invalidateTicket(qc, ticketId),
+  });
+}
+
+export function useDeleteActionItem(ticketId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api<void>(`/tickets/${ticketId}/action-items/${id}`, { method: "DELETE" }),
+    onSuccess: () => invalidateTicket(qc, ticketId),
+  });
 }

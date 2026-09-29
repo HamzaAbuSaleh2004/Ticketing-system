@@ -3,19 +3,21 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, errorMessage } from "../../api/client";
-import type { Category, Role, Team, TicketPriority, User } from "../../api/types";
+import { useOrganizations } from "../../api/hooks";
+import type { Category, Organization, OrganizationKind, Role, Team, TicketPriority, User } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
 import { PRIORITY_SHORT, absoluteTime, relativeTime } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
 
-type AdminUser = User & { two_factor_enabled: boolean };
+type AdminUser = User & { two_factor_enabled: boolean; organization_id: number | null };
 type SlaPolicy = { id: number; name: string; priority: TicketPriority; response_minutes: number; resolution_minutes: number };
 type AdminAudit = { id: number; entity_type: string; entity_id: number; subject: string | null; actor_name: string | null; action: string; diff_json: { before?: Record<string, unknown>; after?: Record<string, unknown> } | null; created_at: string };
 
-const TABS = ["users", "categories", "sla", "changes"] as const;
+const TABS = ["users", "organizations", "categories", "sla", "changes"] as const;
 type TabKey = (typeof TABS)[number];
 const ROLE_LABEL: Record<Role, string> = { end_user: "End user", agent: "Agent", admin: "Admin" };
 const TEAM_LABEL: Record<Team, string> = { tier1: "Tier 1", senior: "Senior" };
+const KIND_LABEL: Record<OrganizationKind, string> = { company: "Company", government: "Government" };
 
 const cellSx = { py: 0.75 } as const;
 
@@ -59,8 +61,9 @@ function useSave(onDone: (msg: string) => void, keys: string[][]) {
 function UsersTab({ notify }: { notify: (m: string) => void }) {
   const { user: me } = useAuth();
   const users = useQuery({ queryKey: ["admin", "users"], queryFn: () => api<AdminUser[]>("/users") });
+  const organizations = useOrganizations();
   const save = useSave(notify, [["admin", "users"], ["staff"]]);
-  const patch = (u: User, body: Partial<User>, msg: string) => save.mutate({ path: `/users/${u.id}`, method: "PATCH", body, msg });
+  const patch = (u: User, body: Partial<AdminUser>, msg: string) => save.mutate({ path: `/users/${u.id}`, method: "PATCH", body, msg });
   const [resetting, setResetting] = useState<AdminUser | null>(null);
 
   return (
@@ -72,6 +75,7 @@ function UsersTab({ notify }: { notify: (m: string) => void }) {
           <TableCell>Email</TableCell>
           <TableCell sx={{ width: 180 }}>Role</TableCell>
           <TableCell sx={{ width: 160 }}>Team</TableCell>
+          <TableCell sx={{ width: 200 }}>Organisation</TableCell>
           <TableCell sx={{ width: 220 }}>Two-step verification</TableCell>
         </TableRow>
       </TableHead>
@@ -127,6 +131,43 @@ function UsersTab({ notify }: { notify: (m: string) => void }) {
                 )}
               </TableCell>
               <TableCell sx={cellSx}>
+                {u.role === "end_user" ? (
+                  <TextField
+                    select
+                    size="small"
+                    fullWidth
+                    value={u.organization_id ?? ""}
+                    disabled={save.isPending}
+                    slotProps={{
+                      htmlInput: { "aria-label": `Organisation for ${u.name}` },
+                      select: {
+                        displayEmpty: true,
+                        renderValue: (v) =>
+                          v === "" ? "None" : ((organizations.data ?? []).find((o) => o.id === v)?.name ?? ""),
+                      },
+                    }}
+                    onChange={(e) => {
+                      const orgId = e.target.value === "" ? null : Number(e.target.value);
+                      const name = orgId === null ? "none" : ((organizations.data ?? []).find((o) => o.id === orgId)?.name ?? "an organisation");
+                      patch(u, { organization_id: orgId }, `${u.name} set to ${name}`);
+                    }}
+                  >
+                    <MenuItem value="">None</MenuItem>
+                    {(organizations.data ?? [])
+                      .filter((o) => o.active || o.id === u.organization_id)
+                      .map((o) => (
+                        <MenuItem key={o.id} value={o.id}>
+                          {o.name}
+                        </MenuItem>
+                      ))}
+                  </TextField>
+                ) : (
+                  <Typography variant="bodySmall" sx={{ color: sys("onSurfaceVariant") }}>
+                    Staff
+                  </Typography>
+                )}
+              </TableCell>
+              <TableCell sx={cellSx}>
                 <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 1 }}>
                   <Typography variant="bodyMedium" sx={{ color: u.two_factor_enabled ? sys("onSurface") : sys("onSurfaceVariant") }}>
                     {u.two_factor_enabled ? "On" : "Not set up yet"}
@@ -167,6 +208,127 @@ function UsersTab({ notify }: { notify: (m: string) => void }) {
       </DialogActions>
     </Dialog>
     </QueryState>
+  );
+}
+
+function OrganizationRow({ org, notify }: { org: Organization; notify: (m: string) => void }) {
+  const save = useSave(notify, [["organizations"]]);
+  const [name, setName] = useState(org.name);
+  useEffect(() => setName(org.name), [org.name]);
+  const dirty = name.trim() !== org.name && name.trim().length > 0;
+
+  return (
+    <TableRow>
+      <TableCell sx={cellSx}>
+        <TextField
+          size="small"
+          fullWidth
+          value={name}
+          disabled={save.isPending}
+          onChange={(e) => setName(e.target.value)}
+          slotProps={{ htmlInput: { maxLength: 255, "aria-label": `Name for ${org.name}` } }}
+        />
+      </TableCell>
+      <TableCell sx={cellSx}>
+        <TextField
+          select
+          size="small"
+          fullWidth
+          value={org.kind}
+          disabled={save.isPending}
+          slotProps={{ htmlInput: { "aria-label": `Kind for ${org.name}` } }}
+          onChange={(e) => {
+            const kind = e.target.value as OrganizationKind;
+            save.mutate({ path: `/organizations/${org.id}`, method: "PATCH", body: { kind }, msg: `${org.name} is now a ${KIND_LABEL[kind].toLowerCase()}` });
+          }}
+        >
+          {(Object.keys(KIND_LABEL) as OrganizationKind[]).map((k) => (
+            <MenuItem key={k} value={k}>
+              {KIND_LABEL[k]}
+            </MenuItem>
+          ))}
+        </TextField>
+      </TableCell>
+      <TableCell sx={cellSx} align="right">
+        <Switch
+          checked={org.active}
+          disabled={save.isPending}
+          slotProps={{ input: { "aria-label": `${org.name} active` } }}
+          onChange={(e) =>
+            save.mutate({ path: `/organizations/${org.id}`, method: "PATCH", body: { active: e.target.checked }, msg: `${org.name} ${e.target.checked ? "activated" : "deactivated"}` })
+          }
+        />
+      </TableCell>
+      <TableCell sx={cellSx} align="right">
+        <Button
+          variant="tonal"
+          size="small"
+          disabled={!dirty || save.isPending}
+          aria-label={`Save name for ${org.name}`}
+          onClick={() => save.mutate({ path: `/organizations/${org.id}`, method: "PATCH", body: { name: name.trim() }, msg: `Renamed to ${name.trim()}` })}
+        >
+          Save
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function OrganizationsTab({ notify }: { notify: (m: string) => void }) {
+  const organizations = useOrganizations();
+  const save = useSave(notify, [["organizations"]]);
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<OrganizationKind>("company");
+
+  function add(e: FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    save.mutate(
+      { path: "/organizations", method: "POST", body: { name: name.trim(), kind }, msg: `Added ${name.trim()}` },
+      { onSuccess: () => setName("") },
+    );
+  }
+
+  return (
+    <Box sx={{ maxWidth: 760 }}>
+      <Box component="form" onSubmit={add} sx={{ display: "flex", gap: 1, alignItems: "flex-start", mb: 2, flexWrap: "wrap" }}>
+        <TextField
+          size="small"
+          label="New organisation"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          sx={{ flex: 1, minWidth: 200 }}
+          slotProps={{ htmlInput: { maxLength: 255 } }}
+        />
+        <TextField select size="small" label="Kind" value={kind} onChange={(e) => setKind(e.target.value as OrganizationKind)} sx={{ width: 160 }}>
+          {(Object.keys(KIND_LABEL) as OrganizationKind[]).map((k) => (
+            <MenuItem key={k} value={k}>
+              {KIND_LABEL[k]}
+            </MenuItem>
+          ))}
+        </TextField>
+        <Button type="submit" variant="contained" disabled={save.isPending || !name.trim()}>
+          Add organisation
+        </Button>
+      </Box>
+      <QueryState query={organizations}>
+      <Table size="small" aria-label="Organisations">
+        <TableHead>
+          <TableRow>
+            <TableCell>Name</TableCell>
+            <TableCell sx={{ width: 180 }}>Kind</TableCell>
+            <TableCell align="right" sx={{ width: 100 }}>Active</TableCell>
+            <TableCell align="right" sx={{ width: 100 }} />
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {(organizations.data ?? []).map((o) => (
+            <OrganizationRow key={o.id} org={o} notify={notify} />
+          ))}
+        </TableBody>
+      </Table>
+      </QueryState>
+    </Box>
   );
 }
 
@@ -313,7 +475,7 @@ function SlaTab({ notify }: { notify: (m: string) => void }) {
   );
 }
 
-const ENTITY_LABEL: Record<string, string> = { user: "User", category: "Category", sla_policy: "SLA policy" };
+const ENTITY_LABEL: Record<string, string> = { user: "User", category: "Category", sla_policy: "SLA policy", organization: "Organisation" };
 
 const FIELD_LABEL: Record<string, string> = {
   role: "Role",
@@ -323,6 +485,8 @@ const FIELD_LABEL: Record<string, string> = {
   slug: "Slug",
   response_minutes: "First reply (min)",
   resolution_minutes: "Resolve (min)",
+  kind: "Kind",
+  organization_id: "Organisation",
 };
 
 // Sign-in security events: a fixed sentence rather than a field diff.
@@ -336,7 +500,7 @@ function show(value: unknown): string {
   if (value === null || value === undefined) return "none";
   if (typeof value === "boolean") return value ? "yes" : "no";
   const s = String(value);
-  return ROLE_LABEL[s as Role] ?? TEAM_LABEL[s as Team] ?? s;
+  return ROLE_LABEL[s as Role] ?? TEAM_LABEL[s as Team] ?? KIND_LABEL[s as OrganizationKind] ?? s;
 }
 
 /** "Role Agent to End user, Team Tier 1 to none". */
@@ -403,12 +567,14 @@ export function AdminPage() {
       </Typography>
       <Tabs value={tab} onChange={(_, v) => setParams({ tab: v })} sx={{ mb: 2, borderBottom: `1px solid ${sys("outlineVariant")}` }}>
         <Tab value="users" label="Users" />
+        <Tab value="organizations" label="Organisations" />
         <Tab value="categories" label="Categories" />
         <Tab value="sla" label="SLA policies" />
         <Tab value="changes" label="Change log" />
       </Tabs>
       <Stack>
         {tab === "users" ? <UsersTab notify={setToast} /> : null}
+        {tab === "organizations" ? <OrganizationsTab notify={setToast} /> : null}
         {tab === "categories" ? <CategoriesTab notify={setToast} /> : null}
         {tab === "sla" ? <SlaTab notify={setToast} /> : null}
         {tab === "changes" ? <ChangesTab /> : null}

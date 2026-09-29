@@ -211,6 +211,25 @@ async def test_enrolment_rejects_a_wrong_code_then_accepts_the_right_one(client)
     assert len(codes) == 10 and len(set(codes)) == 10
 
 
+async def test_many_wrong_enrolment_codes_never_lock_the_account(client, db_session, monkeypatch):
+    """Unlike /2fa/verify, wrong /2fa/enable codes don't count towards the
+    lockout: mistyping while setting up an authenticator app for the first
+    time must have a self-service way out, since re-registering the same
+    email just 409s."""
+    now = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
+    freeze(monkeypatch, now)
+    resp = await client.post(
+        "/auth/register", json={"email": "fumbles@example.com", "password": "Password123!", "name": "Fumbles"}
+    )
+    mfa_token = resp.json()["mfa_token"]
+    setup = (await client.post("/auth/2fa/setup", json={"mfa_token": mfa_token})).json()
+    for _ in range(10):
+        wrong = await client.post("/auth/2fa/enable", json={"mfa_token": mfa_token, "code": "000000"})
+        assert wrong.status_code == 401
+    ok = await client.post("/auth/2fa/enable", json={"mfa_token": mfa_token, "code": _code(setup["secret"])})
+    assert ok.status_code == 200
+
+
 async def test_setup_is_refused_once_2fa_is_on(client, db_session):
     """A stolen password can't re-enrol an account onto the thief's phone."""
     await create_user(db_session, email="enrolled@example.com", role=UserRole.end_user)

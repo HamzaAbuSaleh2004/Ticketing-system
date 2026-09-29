@@ -27,6 +27,11 @@ class Ticket(Base):
     category: Mapped[str | None] = mapped_column(
         ForeignKey("categories.slug"), nullable=True, index=True
     )
+    # Phase 12 addition: which organisation has the problem. Set at create
+    # from the requester's organisation; agents can change it.
+    organization_id: Mapped[int | None] = mapped_column(
+        ForeignKey("organizations.id"), nullable=True, index=True
+    )
 
     requester_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)

@@ -5,7 +5,7 @@ import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "rea
 import { errorMessage } from "../../api/client";
 import { useAgentTicket, usePatchTicket, useQueue } from "../../api/hooks";
 import type { TicketPatch } from "../../api/types";
-import { PriorityChip, StatusChip } from "../../components/TicketChips";
+import { OrganizationKindChip, PriorityChip, StatusChip } from "../../components/TicketChips";
 import { SlaIndicator } from "../../components/SlaIndicator";
 import { absoluteTime, ticketRef } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
@@ -148,8 +148,16 @@ export function AgentTicketPage() {
           <Typography variant="titleLarge" component="h1" sx={{ overflowWrap: "anywhere" }}>
             {ticket.subject}
           </Typography>
+          {ticket.organization_name ? (
+            <Stack direction="row" sx={{ alignItems: "center", gap: 0.75, mt: 0.25 }}>
+              <Typography variant="bodyMedium" sx={{ fontWeight: 500 }}>
+                {ticket.organization_name}
+              </Typography>
+              {ticket.organization_kind ? <OrganizationKindChip kind={ticket.organization_kind} /> : null}
+            </Stack>
+          ) : null}
           <Typography variant="bodySmall" sx={{ color: sys("onSurfaceVariant") }}>
-            {ticket.requester_name}, {ticket.requester_email}. Opened {absoluteTime(ticket.created_at)}
+            Opened by {ticket.requester_name}, {ticket.requester_email}. Opened {absoluteTime(ticket.created_at)}
             {ticket.parent_ticket_id ? (
               <>
                 {". Follow-up to "}

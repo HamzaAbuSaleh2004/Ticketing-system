@@ -63,7 +63,7 @@ async def create_agent(db_session, *, email: str, team: Team = Team.tier1, passw
 
 async def create_user(
     db_session, *, email: str, role: UserRole, name: str = "Test User", team: Team | None = None,
-    password: str = "Secret123!", two_factor: bool = True,
+    organization_id: int | None = None, password: str = "Secret123!", two_factor: bool = True,
 ) -> User:
     """Straight into the DB, with 2FA already set up on TEST_TOTP_SECRET
     (unless two_factor=False: the account still has to enrol)."""
@@ -72,6 +72,7 @@ async def create_user(
         name=name,
         role=role,
         team=team,
+        organization_id=organization_id,
         password_hash=hash_password(password),
         totp_secret=TEST_TOTP_SECRET if two_factor else None,
         totp_enabled_at=datetime.now(UTC) - timedelta(minutes=1) if two_factor else None,

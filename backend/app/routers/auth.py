@@ -89,6 +89,16 @@ async def _wrong_code(session: AsyncSession, user: User) -> HTTPException:
     return HTTPException(status.HTTP_401_UNAUTHORIZED, detail="That code isn't right. Try the current one.")
 
 
+async def _wrong_setup_code(session: AsyncSession) -> HTTPException:
+    """/2fa/enable's wrong-code path never counts towards the lockout: the
+    account isn't enrolled yet, so nobody who reaches this endpoint could
+    instead just enrol their own device with a fresh secret (no code
+    guessing needed), and locking a real user out here has no self-service
+    recovery (re-registering the same email 409s)."""
+    await session.commit()
+    return HTTPException(status.HTTP_401_UNAUTHORIZED, detail="That code isn't right. Try the current one.")
+
+
 def _accept_code(user: User, step: int | None = None) -> None:
     user.mfa_failed_attempts = 0
     user.mfa_locked_until = None
@@ -161,7 +171,7 @@ async def enable_2fa(body: MfaCodeRequest, session: AsyncSession = Depends(get_d
 
     step = mfa.match_totp(user.totp_secret, body.code, last_step=user.totp_last_step)
     if step is None:
-        raise await _wrong_code(session, user)
+        raise await _wrong_setup_code(session)
 
     _accept_code(user, step)
     # Real time, not domain.clock: it's compared with access tokens' `iat`.

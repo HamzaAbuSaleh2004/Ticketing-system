@@ -10,6 +10,7 @@ export type QueueFilters = {
   priority: TicketPriority | null;
   assignee: string | null; // "me" | "unassigned" | user id
   category: string | null;
+  organization: string | null; // "none" | organisation id
   q: string;
   page: number;
 };
@@ -22,6 +23,7 @@ export function readFilters(params: URLSearchParams): QueueFilters {
     priority: (params.get("priority") as TicketPriority | null) ?? null,
     assignee: params.get("assignee"),
     category: params.get("category"),
+    organization: params.get("organization"),
     q: params.get("q") ?? "",
     page: Math.max(1, Number(params.get("page") ?? 1) || 1),
   };
@@ -33,6 +35,7 @@ export function writeFilters(f: QueueFilters): URLSearchParams {
   if (f.priority) p.set("priority", f.priority);
   if (f.assignee) p.set("assignee", f.assignee);
   if (f.category) p.set("category", f.category);
+  if (f.organization) p.set("organization", f.organization);
   if (f.q) p.set("q", f.q);
   if (f.page > 1) p.set("page", String(f.page));
   return p;
@@ -45,6 +48,7 @@ export function apiQuery(f: QueueFilters): string {
   if (f.priority) p.set("priority", f.priority);
   if (f.assignee) p.set("assignee", f.assignee);
   if (f.category) p.set("category", f.category);
+  if (f.organization) p.set("organization", f.organization);
   if (f.q) p.set("q", f.q);
   // Active work sorts by the next deadline; history by most recent change.
   p.set("sort", f.status === "resolved" || f.status === "closed" || f.status === "all" ? "-updated_at" : "sla_due");

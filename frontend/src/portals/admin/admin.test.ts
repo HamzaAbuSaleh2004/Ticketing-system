@@ -10,6 +10,15 @@ describe("describeChange", () => {
     expect(describeChange({ diff_json: null })).toBe("");
   });
 
+  it("reads organisation changes with human labels", () => {
+    expect(describeChange({ diff_json: { before: { kind: "company" }, after: { kind: "government" } } })).toBe(
+      "Kind Company to Government",
+    );
+    expect(describeChange({ diff_json: { before: { organization_id: null }, after: { organization_id: 3 } } })).toBe(
+      "Organisation none to 3",
+    );
+  });
+
   it("reads sign-in security events as sentences", () => {
     expect(describeChange({ action: "user.2fa_reset", diff_json: { before: { two_factor_enabled: true }, after: { two_factor_enabled: false } } })).toBe(
       "Two-step verification reset",

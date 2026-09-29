@@ -1,5 +1,5 @@
 import { Box } from "@mui/material";
-import type { TicketPriority, TicketStatus } from "../api/types";
+import type { OrganizationKind, TicketPriority, TicketStatus } from "../api/types";
 import { PRIORITY_SHORT, STATUS_LABEL } from "../lib/tickets";
 import { sys, type ColorRole } from "../theme/scheme";
 import { typescale } from "../theme/tokens";
@@ -51,4 +51,10 @@ const PRIORITY_TONE: Record<TicketPriority, Tone> = {
 
 export function PriorityChip({ priority }: { priority: TicketPriority }) {
   return <Pill tone={PRIORITY_TONE[priority]}>{PRIORITY_SHORT[priority]}</Pill>;
+}
+
+const ORG_TONE: Tone = { bg: null, fg: "onSurfaceVariant", outline: true };
+
+export function OrganizationKindChip({ kind }: { kind: OrganizationKind }) {
+  return <Pill tone={ORG_TONE}>{kind === "government" ? "Government" : "Company"}</Pill>;
 }

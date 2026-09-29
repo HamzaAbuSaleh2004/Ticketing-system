@@ -25,9 +25,21 @@ from app.domain.sla import (
     leave_pending,
     mark_first_response,
 )
-from app.models import Attachment, AuditLog, Category, Ticket, TicketComment, User
-from app.models.enums import TicketPriority, TicketStatus, UserRole
+from app.models import (
+    Attachment,
+    AuditLog,
+    Category,
+    Organization,
+    Ticket,
+    TicketActionItem,
+    TicketComment,
+    User,
+)
+from app.models.enums import ActionItemSide, TicketPriority, TicketStatus, UserRole
 from app.schemas.ticket import (
+    ActionItemCreate,
+    ActionItemOut,
+    ActionItemPatch,
     AttachmentOut,
     AuditLogOut,
     CommentCreate,
@@ -144,6 +156,22 @@ async def _build_ticket_detail(
     comments = [_comment_out(c, user) for c in await session.scalars(comment_stmt)]
     attachments = [AttachmentOut.model_validate(a) for a in await session.scalars(attachment_stmt)]
 
+    organization = await session.get(Organization, ticket.organization_id) if ticket.organization_id else None
+    action_item_rows = (
+        await session.execute(
+            select(TicketActionItem, User.name)
+            .outerjoin(User, User.id == TicketActionItem.done_by)
+            .where(TicketActionItem.ticket_id == ticket.id)
+            .order_by(TicketActionItem.created_at, TicketActionItem.id)
+        )
+    ).all()
+    action_items = [
+        ActionItemOut.model_validate(item).model_copy(update={"done_by_name": name})
+        for item, name in action_item_rows
+    ]
+    open_customer_items = sum(1 for i in action_items if i.side is ActionItemSide.customer and not i.done)
+    open_liverx_items = sum(1 for i in action_items if i.side is ActionItemSide.liverx and not i.done)
+
     cooloff = timedelta(hours=get_settings().RESOLVED_COOLOFF_HOURS)
     public = TicketDetailPublic.model_validate(ticket).model_copy(
         update={
@@ -152,6 +180,11 @@ async def _build_ticket_detail(
             "reopen_until": ticket.resolved_at + cooloff
             if ticket.status is TicketStatus.resolved and ticket.resolved_at
             else None,
+            "organization_name": organization.name if organization else None,
+            "organization_kind": organization.kind if organization else None,
+            "action_items": action_items,
+            "open_customer_items": open_customer_items,
+            "open_liverx_items": open_liverx_items,
         }
     )
     if not agent:
@@ -189,10 +222,10 @@ def _comment_out(comment: TicketComment, viewer: User) -> CommentOut:
     return out
 
 
-def _parse_sort(sort: str) -> tuple[ColumnElement, bool]:
+def _parse_sort(sort: str, columns: dict[str, ColumnElement] = _SORTABLE_COLUMNS) -> tuple[ColumnElement, bool]:
     desc = sort.startswith("-")
     key = sort[1:] if desc else sort
-    column = _SORTABLE_COLUMNS.get(key)
+    column = columns.get(key)
     if column is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"Unknown sort field: {key}")
     return column, desc
@@ -218,6 +251,7 @@ async def create_ticket(
         status=TicketStatus.new,
         priority=TicketPriority.normal,
         requester_id=user.id,
+        organization_id=user.organization_id,
         sla_response_due=response_due,
         sla_resolution_due=resolution_due,
         created_at=now,
@@ -245,6 +279,7 @@ async def list_tickets(
     priority: TicketPriority | None = None,
     assignee: str | None = None,
     category: str | None = None,
+    organization: str | None = None,
     q: str | None = None,
     sort: str = "-created_at",
     page: int = Query(1, ge=1),
@@ -261,6 +296,17 @@ async def list_tickets(
         conditions.append(Ticket.priority == priority)
     if category is not None:
         conditions.append(Ticket.category == category)
+    if organization is not None:
+        if organization == "none":
+            conditions.append(Ticket.organization_id.is_(None))
+        else:
+            try:
+                conditions.append(Ticket.organization_id == int(organization))
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="organization must be 'none' or an organisation id",
+                ) from exc
     if q:
         like = f"%{q}%"
         conditions.append(or_(Ticket.subject.ilike(like), Ticket.description.ilike(like)))
@@ -279,14 +325,42 @@ async def list_tickets(
                 ) from exc
             conditions.append(Ticket.assignee_id == assignee_id)
 
-    sort_column, sort_desc = _parse_sort(sort)
-
     requester = aliased(User)
     assignee = aliased(User)
+    org = aliased(Organization)
+    sort_column, sort_desc = _parse_sort(sort, {**_SORTABLE_COLUMNS, "organization": org.name})
+
+    # One aggregate per ticket for the open item counts on each side, joined
+    # rather than queried per row (a prior per-row-query bug elsewhere in
+    # this codebase was flagged in code review as an N+1).
+    open_items = (
+        select(
+            TicketActionItem.ticket_id,
+            func.count().filter(
+                TicketActionItem.side == ActionItemSide.customer, TicketActionItem.done.is_(False)
+            ).label("open_customer"),
+            func.count().filter(
+                TicketActionItem.side == ActionItemSide.liverx, TicketActionItem.done.is_(False)
+            ).label("open_liverx"),
+        )
+        .group_by(TicketActionItem.ticket_id)
+        .subquery()
+    )
+
     stmt = (
-        select(Ticket, requester.name, assignee.name)
+        select(
+            Ticket,
+            requester.name,
+            assignee.name,
+            org.name,
+            org.kind,
+            func.coalesce(open_items.c.open_customer, 0),
+            func.coalesce(open_items.c.open_liverx, 0),
+        )
         .join(requester, requester.id == Ticket.requester_id)
         .outerjoin(assignee, assignee.id == Ticket.assignee_id)
+        .outerjoin(org, org.id == Ticket.organization_id)
+        .outerjoin(open_items, open_items.c.ticket_id == Ticket.id)
     )
     count_stmt = select(func.count()).select_from(Ticket)
     for condition in conditions:
@@ -304,9 +378,19 @@ async def list_tickets(
     total = await session.scalar(count_stmt) or 0
     rows = (await session.execute(stmt)).all()
 
+    def _item(t: Ticket, org_name: str | None, org_kind, open_customer: int, open_liverx: int) -> TicketListItem:
+        return TicketListItem.model_validate(t).model_copy(
+            update={
+                "organization_name": org_name,
+                "organization_kind": org_kind,
+                "open_customer_items": open_customer,
+                "open_liverx_items": open_liverx,
+            }
+        )
+
     if not _is_agent(user):
         return TicketListResponse(
-            items=[TicketListItem.model_validate(t) for t, _, _ in rows],
+            items=[_item(t, org_name, org_kind, oc, ol) for t, _, _, org_name, org_kind, oc, ol in rows],
             total=total,
             page=page,
             page_size=page_size,
@@ -314,14 +398,14 @@ async def list_tickets(
     return TicketQueueResponse(
         items=[
             TicketQueueItem(
-                **TicketListItem.model_validate(t).model_dump(),
+                **_item(t, org_name, org_kind, oc, ol).model_dump(),
                 requester_name=requester_name,
                 assignee_name=assignee_name,
                 sla_paused_at=t.sla_paused_at,
                 first_responded_at=t.first_responded_at,
                 sla_paused_total_seconds=t.sla_paused_total_seconds,
             )
-            for t, requester_name, assignee_name in rows
+            for t, requester_name, assignee_name, org_name, org_kind, oc, ol in rows
         ],
         total=total,
         page=page,
@@ -382,6 +466,16 @@ async def patch_ticket(
         before["category"] = ticket.category
         ticket.category = new_category
         after["category"] = ticket.category
+
+    if "organization_id" in changes and changes["organization_id"] != ticket.organization_id:
+        new_org_id = changes["organization_id"]
+        if new_org_id is not None:
+            org = await session.get(Organization, new_org_id)
+            if org is None or not org.active:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown or inactive organisation")
+        before["organization_id"] = ticket.organization_id
+        ticket.organization_id = new_org_id
+        after["organization_id"] = ticket.organization_id
 
     if "assignee_id" in changes and changes["assignee_id"] != ticket.assignee_id:
         new_assignee_id = changes["assignee_id"]
@@ -603,3 +697,117 @@ async def upload_attachment(
     await session.commit()
     await session.refresh(attachment)
     return AttachmentOut.model_validate(attachment)
+
+
+async def _action_item_out(session: AsyncSession, item: TicketActionItem) -> ActionItemOut:
+    done_by_name = None
+    if item.done_by:
+        done_by_user = await session.get(User, item.done_by)
+        done_by_name = done_by_user.name if done_by_user else None
+    return ActionItemOut.model_validate(item).model_copy(update={"done_by_name": done_by_name})
+
+
+async def _get_action_item_or_404(session: AsyncSession, ticket_id: int, item_id: int) -> TicketActionItem:
+    item = await session.get(TicketActionItem, item_id)
+    if item is None or item.ticket_id != ticket_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Action item not found")
+    return item
+
+
+@router.post(
+    "/{ticket_id}/action-items", response_model=ActionItemOut, status_code=status.HTTP_201_CREATED
+)
+async def create_action_item(
+    ticket_id: int,
+    body: ActionItemCreate,
+    user: User = Depends(require_role(*_AGENT_ROLES)),
+    session: AsyncSession = Depends(get_db),
+) -> ActionItemOut:
+    ticket = await _get_ticket_or_404(session, ticket_id, user, lock=True)
+    if ticket.status is TicketStatus.closed:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Closed tickets are read-only")
+
+    item = TicketActionItem(
+        ticket_id=ticket.id, side=body.side, description=body.description, created_by=user.id
+    )
+    session.add(item)
+    await session.flush()
+    await write_audit(
+        session, entity_type="ticket", entity_id=ticket.id, actor_id=user.id,
+        action="ticket.action_item_added",
+        diff={"after": {"id": item.id, "side": body.side.value, "description": body.description}},
+    )
+    await session.commit()
+    await session.refresh(item)
+    return await _action_item_out(session, item)
+
+
+@router.patch("/{ticket_id}/action-items/{item_id}", response_model=ActionItemOut)
+async def patch_action_item(
+    ticket_id: int,
+    item_id: int,
+    body: ActionItemPatch,
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_db),
+) -> ActionItemOut:
+    ticket = await _get_ticket_or_404(session, ticket_id, user, lock=True)
+    item = await _get_action_item_or_404(session, ticket.id, item_id)
+    if ticket.status is TicketStatus.closed:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Closed tickets are read-only")
+
+    changes = body.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="No fields to update")
+    # The requester may tick their own side's items, nothing else.
+    if not _is_agent(user) and (item.side is not ActionItemSide.customer or set(changes) - {"done"}):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="You can only mark your own items done")
+
+    before: dict = {}
+    after: dict = {}
+    now = clock.now()
+
+    if "description" in changes and changes["description"] != item.description:
+        before["description"] = item.description
+        item.description = changes["description"]
+        after["description"] = item.description
+
+    if "done" in changes and changes["done"] != item.done:
+        before["done"] = item.done
+        item.done = changes["done"]
+        item.done_at = now if item.done else None
+        item.done_by = user.id if item.done else None
+        after["done"] = item.done
+
+    if not before:
+        await session.commit()
+        return await _action_item_out(session, item)
+
+    await write_audit(
+        session, entity_type="ticket", entity_id=ticket.id, actor_id=user.id,
+        action="ticket.action_item_updated",
+        diff={"before": before, "after": after, "item_id": item.id},
+    )
+    await session.commit()
+    await session.refresh(item)
+    return await _action_item_out(session, item)
+
+
+@router.delete("/{ticket_id}/action-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_action_item(
+    ticket_id: int,
+    item_id: int,
+    user: User = Depends(require_role(*_AGENT_ROLES)),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    ticket = await _get_ticket_or_404(session, ticket_id, user, lock=True)
+    item = await _get_action_item_or_404(session, ticket.id, item_id)
+    if ticket.status is TicketStatus.closed:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Closed tickets are read-only")
+
+    await write_audit(
+        session, entity_type="ticket", entity_id=ticket.id, actor_id=user.id,
+        action="ticket.action_item_removed",
+        diff={"before": {"id": item.id, "side": item.side.value, "description": item.description}},
+    )
+    await session.delete(item)
+    await session.commit()

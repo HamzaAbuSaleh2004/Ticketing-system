@@ -8,8 +8,15 @@ from sqlalchemy import func, select
 from app import seed as seed_module
 from app.config import Settings
 from app.domain import clock
-from app.models import AuditLog, SlaPolicy, Ticket, TicketComment
-from app.models.enums import TicketPriority, TicketStatus
+from app.models import (
+    AuditLog,
+    SlaPolicy,
+    Ticket,
+    TicketActionItem,
+    TicketComment,
+    User,
+)
+from app.models.enums import ActionItemSide, TicketPriority, TicketStatus
 from app.seed_demo import seed_demo_tickets
 from app.services.sweeps import auto_close_sweep, sla_risk_sweep, ticket_at_risk
 
@@ -25,6 +32,7 @@ def _raw() -> dict[str, dict]:
 
 async def _seed(db_session, monkeypatch):
     monkeypatch.setattr(clock, "now", lambda: NOW)
+    await seed_module.seed_organizations(db_session)
     await seed_module.seed_users(db_session)
     await seed_module.seed_sla_policies(db_session)
     await seed_module.seed_categories(db_session)
@@ -60,6 +68,18 @@ async def test_demo_seed_maps_the_file_as_its_readme_specifies(db_session, monke
 
     assert by_ref["t25"].parent_ticket_id == by_ref["t24"].id
     assert by_ref["t01"].category is None and by_ref["t01"].priority is TicketPriority.normal
+
+    # Phase 12: every demo ticket inherits its requester's organisation,
+    # exactly like a live POST /tickets, and a few active ones have items.
+    users_by_id = {u.id: u for u in await db_session.scalars(select(User))}
+    for t in tickets.values():
+        assert t.organization_id == users_by_id[t.requester_id].organization_id
+    assert any(t.organization_id is not None for t in tickets.values())
+
+    items = (await db_session.scalars(select(TicketActionItem))).all()
+    assert len(items) == 6  # 3 active tickets x (one customer + one liverx) item
+    assert {i.side for i in items} == {ActionItemSide.customer, ActionItemSide.liverx}
+    assert sum(i.done for i in items) == 1
 
     notes = await db_session.scalar(select(func.count()).select_from(TicketComment).where(TicketComment.is_internal_note.is_(True)))
     assert notes == sum(c["is_internal_note"] for r in raw.values() for c in r.get("comments", []))

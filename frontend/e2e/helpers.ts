@@ -13,23 +13,30 @@ export async function signInPassword(page: Page, email: string, password = SEED_
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
-/** Password, then the second step, as a person would. */
-export async function signIn(page: Page, email: string, password = SEED_PASSWORD) {
+/** Password, then the second step, as a person would. `secret` is only
+ * needed for an account enrolled with its own secret (not the shared demo
+ * one), e.g. one enrolled through the API with a fresh `/2fa/setup` call. */
+export async function signIn(page: Page, email: string, password = SEED_PASSWORD, secret?: string) {
   await signInPassword(page, email, password);
-  await enterCode(page, email);
+  await enterCode(page, email, secret);
 }
 
-/** The "Enter your code" screen, for a demo account. */
-export async function enterCode(page: Page, email: string) {
-  await withCode(email, async (code) => {
-    await page.getByLabel("6-digit code").fill(code);
-    await page.getByRole("button", { name: "Verify" }).click();
-    // Signed in (left /login), or the code was refused (already used).
-    await page.waitForFunction(
-      () => !location.pathname.startsWith("/login") || document.body.innerText.includes("That code isn't right"),
-    );
-    return !new URL(page.url()).pathname.startsWith("/login");
-  });
+/** The "Enter your code" screen, for a demo account (or any account, given
+ * its own secret). */
+export async function enterCode(page: Page, email: string, secret?: string) {
+  await withCode(
+    email,
+    async (code) => {
+      await page.getByLabel("6-digit code").fill(code);
+      await page.getByRole("button", { name: "Verify" }).click();
+      // Signed in (left /login), or the code was refused (already used).
+      await page.waitForFunction(
+        () => !location.pathname.startsWith("/login") || document.body.innerText.includes("That code isn't right"),
+      );
+      return !new URL(page.url()).pathname.startsWith("/login");
+    },
+    secret,
+  );
 }
 
 /** First-time setup on the enrolment screen: reads the key shown under the

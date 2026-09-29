@@ -204,11 +204,21 @@ export function ColumnChart({ points, valueLabel, height = 220 }: { points: Poin
   );
 }
 
-export function BarChart({ points, caption }: { points: Point[]; caption: string }) {
+export function BarChart({
+  points,
+  caption,
+  labelHeader = "Status",
+  labelWidth = 96,
+}: {
+  points: Point[];
+  caption: string;
+  labelHeader?: string;
+  labelWidth?: number;
+}) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
   const [table, setTable] = useState(false);
-  const labelW = 96;
+  const labelW = labelWidth;
   const valueW = 40;
   const rowH = 36;
   const max = Math.max(...points.map((p) => p.value), 1);
@@ -250,7 +260,7 @@ export function BarChart({ points, caption }: { points: Point[]; caption: string
         <Table size="small" aria-label={caption}>
           <TableHead>
             <TableRow>
-              <TableCell>Status</TableCell>
+              <TableCell>{labelHeader}</TableCell>
               <TableCell align="right">Tickets</TableCell>
             </TableRow>
           </TableHead>

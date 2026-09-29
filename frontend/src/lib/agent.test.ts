@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { statusOptions } from "./lifecycle";
 import { formatDuration, slaView, type SlaInput } from "./sla";
+import { waitingOnText } from "./tickets";
+
+describe("waitingOnText", () => {
+  it("names each side with an open count, or null when both are clear", () => {
+    expect(waitingOnText(0, 0)).toBeNull();
+    expect(waitingOnText(2, 0)).toBe("Customer 2");
+    expect(waitingOnText(0, 1)).toBe("LiverX 1");
+    expect(waitingOnText(1, 2)).toBe("Customer 1, LiverX 2");
+  });
+});
 
 const CREATED = "2026-05-01T09:00:00Z";
 const at = (iso: string) => Date.parse(iso);

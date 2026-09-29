@@ -18,6 +18,10 @@ PLAN.md §2 additions beyond a straight reading of the brief's data model:
 - users.name, users.team (tier1/senior): the escalation queue.
 - knowledge_base_articles.tags, .slug: the help-article link target.
 - Indexes: audit_log(entity_type, entity_id), tickets.status, tickets.priority.
+- ix_knowledge_base_articles_search: a GIN index on the full-text search
+  expression kb.py's /kb/search queries and orders by (Phase 12 follow-up:
+  found by code review, so /kb/search doesn't sequential-scan every article
+  as the knowledge base grows).
 
 Phase 11 (mandatory TOTP two-factor authentication), on users:
 - totp_secret, totp_enabled_at: the authenticator secret; it only counts once
@@ -65,6 +69,16 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('slug')
+    )
+    # GIN index on the full-text search expression kb.py queries
+    # (to_tsvector('english', title || ' ' || body)): without it, every
+    # /kb/search call recomputes the tsvector for and sequential-scans every
+    # article, which is fine at 5 seeded articles but degrades as the
+    # knowledge base grows.
+    op.execute(
+        "CREATE INDEX ix_knowledge_base_articles_search "
+        "ON knowledge_base_articles "
+        "USING gin (to_tsvector('english'::regconfig, title || ' ' || body))"
     )
     op.create_table('sla_policies',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -182,6 +196,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
     op.drop_table('sla_policies')
+    op.execute("DROP INDEX IF EXISTS ix_knowledge_base_articles_search")
     op.drop_table('knowledge_base_articles')
     op.drop_table('categories')
     for enum in ('ticket_status', 'ticket_priority', 'user_role', 'user_team'):

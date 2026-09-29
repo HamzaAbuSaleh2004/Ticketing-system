@@ -4,18 +4,20 @@ import { Link as RouterLink } from "react-router-dom";
 import type { TicketQueueItem } from "../../api/types";
 import { PriorityChip, StatusChip } from "../../components/TicketChips";
 import { SlaIndicator } from "../../components/SlaIndicator";
-import { absoluteTime, compactAgo, relativeTime, ticketRef } from "../../lib/tickets";
+import { absoluteTime, compactAgo, relativeTime, ticketRef, waitingOnText } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
 
 const COLUMNS: { key: string; label: string; width?: number; align?: "right" }[] = [
   { key: "id", label: "ID", width: 96 },
   { key: "subject", label: "Subject" },
-  { key: "requester", label: "Requester", width: 150 },
+  { key: "organization", label: "Organisation", width: 150 },
+  { key: "requester", label: "Opened by", width: 150 },
   { key: "priority", label: "Priority", width: 92 },
   { key: "status", label: "Status", width: 112 },
   // Wide enough for "22h 04m over" + "Breached" without truncation.
   { key: "sla", label: "SLA", width: 196 },
   { key: "assignee", label: "Assignee", width: 140 },
+  { key: "waiting_on", label: "Waiting on", width: 140 },
   { key: "updated", label: "Updated", width: 80, align: "right" },
 ];
 
@@ -43,7 +45,7 @@ export function QueueTable({
 
   return (
     <Box sx={{ overflowX: "auto" }}>
-      <Table size="small" stickyHeader aria-label="Tickets" sx={{ tableLayout: "fixed", minWidth: 1028 }}>
+      <Table size="small" stickyHeader aria-label="Tickets" sx={{ tableLayout: "fixed", minWidth: 1318 }}>
         <TableHead>
           <TableRow>
             {COLUMNS.map((c) => (
@@ -98,6 +100,9 @@ export function QueueTable({
                     </Typography>
                   ) : null}
                 </TableCell>
+                <TableCell sx={{ ...cell, color: t.organization_name ? sys("onSurface") : sys("onSurfaceVariant") }}>
+                  {t.organization_name ?? "None"}
+                </TableCell>
                 <TableCell sx={cell}>{t.requester_name}</TableCell>
                 <TableCell sx={cell}>
                   <PriorityChip priority={t.priority} />
@@ -110,6 +115,9 @@ export function QueueTable({
                 </TableCell>
                 <TableCell sx={{ ...cell, color: t.assignee_name ? sys("onSurface") : sys("onSurfaceVariant") }}>
                   {t.assignee_name ?? "Unassigned"}
+                </TableCell>
+                <TableCell sx={{ ...cell, color: sys("onSurfaceVariant") }}>
+                  {waitingOnText(t.open_customer_items, t.open_liverx_items) ?? "Nothing pending"}
                 </TableCell>
                 <TableCell sx={cell} align="right">
                   <Typography variant="bodyMedium" component="time" dateTime={t.updated_at} title={`${relativeTime(t.updated_at)}, ${absoluteTime(t.updated_at)}`} className="tabular">

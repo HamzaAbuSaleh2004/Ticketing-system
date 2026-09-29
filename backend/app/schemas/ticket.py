@@ -1,8 +1,13 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from app.models.enums import TicketPriority, TicketStatus
+from app.models.enums import (
+    ActionItemSide,
+    OrganizationKind,
+    TicketPriority,
+    TicketStatus,
+)
 
 
 class TicketCreate(BaseModel):
@@ -19,7 +24,52 @@ class TicketPatch(BaseModel):
     assignee_id: int | None = None
     priority: TicketPriority | None = None
     category: str | None = None
+    organization_id: int | None = None
     escalate: bool | None = None
+
+
+def _clean_description(value: str | None) -> str:
+    # ActionItemCreate's field is required (plain `str`), so pydantic's own
+    # type check rejects None there before this runs. ActionItemPatch's field
+    # is `str | None` so the field can be left unset — but if a client
+    # explicitly sends `"description": null`, it must be a clean 422, not an
+    # AttributeError from calling .strip() on None (which FastAPI would
+    # otherwise surface as an unhandled 500).
+    if value is None or not value.strip():
+        raise ValueError("Can't be blank")
+    return value.strip()
+
+
+class ActionItemCreate(BaseModel):
+    side: ActionItemSide
+    description: str = Field(min_length=1, max_length=500)
+
+    _description = field_validator("description")(_clean_description)
+
+
+class ActionItemPatch(BaseModel):
+    """Agents/admins may change either field; a requester may only set
+    `done` on a `side=customer` item — enforced in the router, not here,
+    since it depends on who's asking and which item this is."""
+
+    done: bool | None = None
+    description: str | None = Field(None, min_length=1, max_length=500)
+
+    _description = field_validator("description")(_clean_description)
+
+
+class ActionItemOut(BaseModel):
+    id: int
+    side: ActionItemSide
+    description: str
+    done: bool
+    created_by: int
+    created_at: datetime
+    done_at: datetime | None
+    done_by: int | None
+    done_by_name: str | None = None
+
+    model_config = {"from_attributes": True}
 
 
 class CommentCreate(BaseModel):
@@ -75,6 +125,11 @@ class TicketListItem(BaseModel):
     sla_resolution_due: datetime | None
     created_at: datetime
     updated_at: datetime
+    organization_id: int | None
+    organization_name: str | None = None
+    organization_kind: OrganizationKind | None = None
+    open_customer_items: int = 0
+    open_liverx_items: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -119,6 +174,7 @@ class TicketDetailPublic(TicketListItem):
     reopen_until: datetime | None = None
     comments: list[CommentOut] = []
     attachments: list[AttachmentOut] = []
+    action_items: list[ActionItemOut] = []
 
 
 class TicketDetail(TicketDetailPublic):

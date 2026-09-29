@@ -15,12 +15,34 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain import clock
 from app.domain.audit import write_audit
 from app.domain.sla import compute_due_dates
-from app.models import AuditLog, SlaPolicy, Ticket, TicketComment, User
-from app.models.enums import TicketPriority, TicketStatus, UserRole
+from app.models import (
+    AuditLog,
+    SlaPolicy,
+    Ticket,
+    TicketActionItem,
+    TicketComment,
+    User,
+)
+from app.models.enums import ActionItemSide, TicketPriority, TicketStatus, UserRole
 
 logger = logging.getLogger(__name__)
 
 _AGENT_ROLES = (UserRole.agent, UserRole.admin)
+
+# Phase 12 addition: a few "what's needed" items on active tickets, so the
+# queue and workspace aren't empty of them. Not part of tickets.json (which
+# predates action items and has its own fixed-content contract) - these are
+# generic enough to make sense regardless of which tickets they land on.
+_CUSTOMER_ACTION_ITEMS = [
+    "Reply with a screenshot of the error",
+    "Confirm the account email on the invoice",
+    "Share the order or reference number",
+]
+_LIVERX_ACTION_ITEMS = [
+    "Check the account's recent login history",
+    "Confirm the refund with billing",
+    "Follow up once the fix ships",
+]
 
 
 def load_demo_file(path: str) -> list[dict]:
@@ -54,6 +76,7 @@ async def seed_demo_tickets(session: AsyncSession, path: str) -> int:
         return now - timedelta(minutes=minutes)
 
     ids_by_ref: dict[str, int] = {}
+    inserted: list[Ticket] = []
 
     # Oldest first, so a follow-up's parent already has an id (step 6).
     for t in sorted(tickets, key=lambda t: t["created_minutes_ago"], reverse=True):
@@ -74,6 +97,8 @@ async def seed_demo_tickets(session: AsyncSession, path: str) -> int:
             category=t.get("category"),
             requester_id=users[t["requester_email"]].id,
             assignee_id=users[t["assignee_email"]].id if t.get("assignee_email") else None,
+            # Inherited from the requester, exactly like a live POST /tickets.
+            organization_id=users[t["requester_email"]].organization_id,
             created_at=created,
             sla_response_due=response_due,
             sla_resolution_due=resolution_due,
@@ -107,6 +132,7 @@ async def seed_demo_tickets(session: AsyncSession, path: str) -> int:
         session.add(ticket)
         await session.flush()
         ids_by_ref[t["ref"]] = ticket.id
+        inserted.append(ticket)
 
         for c in comments:
             session.add(
@@ -133,6 +159,34 @@ async def seed_demo_tickets(session: AsyncSession, path: str) -> int:
             update(AuditLog)
             .where(AuditLog.entity_type == "ticket", AuditLog.entity_id == ticket.id)
             .values(created_at=created)
+        )
+
+    # A few "what's needed" items on active, assigned tickets - enough that
+    # the queue and workspace show some, without touching tickets.json.
+    active = [
+        t for t in inserted
+        if t.status in (TicketStatus.open, TicketStatus.in_progress, TicketStatus.pending) and t.assignee_id
+    ]
+    for i, ticket in enumerate(active[:3]):
+        customer_done = i == 0
+        session.add(
+            TicketActionItem(
+                ticket_id=ticket.id,
+                side=ActionItemSide.customer,
+                description=_CUSTOMER_ACTION_ITEMS[i % len(_CUSTOMER_ACTION_ITEMS)],
+                created_by=ticket.assignee_id,
+                done=customer_done,
+                done_at=ticket.updated_at if customer_done else None,
+                done_by=ticket.requester_id if customer_done else None,
+            )
+        )
+        session.add(
+            TicketActionItem(
+                ticket_id=ticket.id,
+                side=ActionItemSide.liverx,
+                description=_LIVERX_ACTION_ITEMS[i % len(_LIVERX_ACTION_ITEMS)],
+                created_by=ticket.assignee_id,
+            )
         )
 
     await session.commit()

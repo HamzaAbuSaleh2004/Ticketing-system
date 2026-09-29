@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import require_role
 from app.db import get_db
 from app.domain.audit import write_audit
-from app.models import AuditLog, Category, SlaPolicy, Ticket, User
+from app.models import AuditLog, Category, Organization, SlaPolicy, Ticket, User
 from app.models.enums import Team, TicketPriority, UserRole
 from app.schemas.category import CategoryOut
 from app.services.tickets import ACTIVE_STATUSES
@@ -31,6 +31,7 @@ class AdminUserOut(BaseModel):
     name: str
     role: UserRole
     team: Team | None
+    organization_id: int | None
     two_factor_enabled: bool
 
     model_config = {"from_attributes": True}
@@ -39,6 +40,7 @@ class AdminUserOut(BaseModel):
 class UserPatch(BaseModel):
     role: UserRole | None = None
     team: Team | None = None
+    organization_id: int | None = None
 
 
 def _clean_name(value: str | None) -> str | None:
@@ -128,8 +130,14 @@ async def patch_user(
     target = await session.get(User, user_id)
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found")
-    # An explicit null role would violate NOT NULL; null team is derived below.
-    changes = body.model_dump(exclude_unset=True, exclude_none=True)
+    changes = body.model_dump(exclude_unset=True)
+    # An explicit null role would violate NOT NULL, so it's ignored, same as
+    # never sending it; null team is derived below either way. organization_id
+    # keeps its explicit null through this point, so PATCH {"organization_id":
+    # null} can actually clear it (unlike role/team, it's a real, meaningful
+    # value to set back to nothing).
+    if changes.get("role") is None:
+        changes.pop("role", None)
     if target.id == admin.id and "role" in changes and changes["role"] != target.role:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="You can't change your own role")
     staff_roles = (UserRole.agent, UserRole.admin)
@@ -151,6 +159,19 @@ async def patch_user(
         changes["team"] = None
     elif changes.get("team", target.team) is None:
         changes["team"] = Team.tier1
+
+    # An organisation only means something for end users, same rule as team.
+    if "organization_id" in changes:
+        if role != UserRole.end_user:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, detail="organization_id only applies to end users"
+            )
+        if changes["organization_id"] is not None:
+            org = await session.get(Organization, changes["organization_id"])
+            if org is None or not org.active:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown or inactive organisation")
+    if role != UserRole.end_user:
+        changes["organization_id"] = None
 
     before, after = _diff(target, changes)
     if before:
@@ -269,9 +290,12 @@ async def patch_sla_policy(
 # --- audit of admin changes ------------------------------------------------
 
 
+_ADMIN_AUDIT_ENTITIES = ("user", "category", "sla_policy", "organization")
+
+
 @router.get("/admin/audit", response_model=list[AdminAuditOut])
 async def admin_audit(
-    entity_type: Literal["user", "category", "sla_policy"] | None = None,
+    entity_type: Literal["user", "category", "sla_policy", "organization"] | None = None,
     limit: int = Query(50, ge=1, le=200),
     admin: User = Depends(_admin),
     session: AsyncSession = Depends(get_db),
@@ -279,12 +303,12 @@ async def admin_audit(
     stmt = (
         select(AuditLog, User.name)
         .outerjoin(User, User.id == AuditLog.actor_id)
-        .where(AuditLog.entity_type.in_([entity_type] if entity_type else ["user", "category", "sla_policy"]))
+        .where(AuditLog.entity_type.in_([entity_type] if entity_type else list(_ADMIN_AUDIT_ENTITIES)))
         .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
         .limit(limit)
     )
     rows = (await session.execute(stmt)).all()
-    ids = {kind: {r.entity_id for r, _ in rows if r.entity_type == kind} for kind in ("user", "category", "sla_policy")}
+    ids = {kind: {r.entity_id for r, _ in rows if r.entity_type == kind} for kind in _ADMIN_AUDIT_ENTITIES}
     names: dict[tuple[str, int], str] = {}
     for u in await session.scalars(select(User).where(User.id.in_(ids["user"]))):
         names["user", u.id] = u.name
@@ -292,6 +316,8 @@ async def admin_audit(
         names["category", c.id] = c.name
     for p in await session.scalars(select(SlaPolicy).where(SlaPolicy.id.in_(ids["sla_policy"]))):
         names["sla_policy", p.id] = p.priority.value
+    for o in await session.scalars(select(Organization).where(Organization.id.in_(ids["organization"]))):
+        names["organization", o.id] = o.name
     return [
         AdminAuditOut(
             id=row.id, entity_type=row.entity_type, entity_id=row.entity_id,

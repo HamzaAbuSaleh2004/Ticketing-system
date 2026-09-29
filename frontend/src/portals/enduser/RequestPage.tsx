@@ -12,6 +12,7 @@ import { PRIORITY_LABEL, absoluteTime, relativeTime, replyMode, ticketRef } from
 import { sys } from "../../theme/scheme";
 import { typescale } from "../../theme/tokens";
 import { CustomerStatusChip } from "./CustomerStatusChip";
+import { WhatsNeeded } from "./WhatsNeeded";
 
 function InfoChip({ children }: { children: string }) {
   return (
@@ -215,6 +216,15 @@ export function RequestPage() {
         {triaged ? <InfoChip>{PRIORITY_LABEL[ticket.priority]}</InfoChip> : null}
       </Stack>
 
+      {ticket.organization_name ? (
+        <Stack direction="row" sx={{ alignItems: "center", gap: 1, mb: 3 }}>
+          <Typography variant="bodyMedium" sx={{ fontWeight: 500 }}>
+            {ticket.organization_name}
+          </Typography>
+          <InfoChip>{ticket.organization_kind === "government" ? "Government" : "Company"}</InfoChip>
+        </Stack>
+      ) : null}
+
       {ticket.parent_ticket_id ? (
         <Typography variant="bodyMedium" sx={{ mb: 2, color: sys("onSurfaceVariant") }}>
           Follow-up to{" "}
@@ -252,6 +262,8 @@ export function RequestPage() {
           </Stack>
         </Box>
       ) : null}
+
+      <WhatsNeeded ticket={ticket} />
 
       <ReplyBox ticket={ticket} />
 

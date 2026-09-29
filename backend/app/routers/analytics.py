@@ -45,6 +45,11 @@ class Breaches(BaseModel):
     resolution: int
 
 
+class OrganizationCount(BaseModel):
+    name: str
+    count: int
+
+
 class AnalyticsSummary(BaseModel):
     from_date: date
     to_date: date
@@ -54,6 +59,7 @@ class AnalyticsSummary(BaseModel):
     resolution: DurationStats
     backlog: list[StatusCount]
     sla_breaches: Breaches
+    backlog_by_organization: list[OrganizationCount]
 
 
 # Every figure is a SQL aggregate over tickets created in [start, end).
@@ -94,6 +100,24 @@ _BACKLOG = text("""
     FROM tickets
     WHERE status::text = ANY(:statuses)
     GROUP BY status
+""")
+
+# Top 10 organisations by current open backlog, plus a fixed "no
+# organisation" bucket (counted separately so a busy top 10 can't push it out).
+_BACKLOG_BY_ORG = text("""
+    SELECT o.name AS name, count(*) AS n
+    FROM tickets t
+    JOIN organizations o ON o.id = t.organization_id
+    WHERE t.status::text = ANY(:statuses)
+    GROUP BY o.name
+    ORDER BY n DESC, o.name
+    LIMIT 10
+""")
+
+_BACKLOG_NO_ORG = text("""
+    SELECT count(*) AS n
+    FROM tickets t
+    WHERE t.status::text = ANY(:statuses) AND t.organization_id IS NULL
 """)
 
 # A response SLA is breached if the first public reply came late, or never
@@ -154,11 +178,11 @@ async def summary(
     ]
     first_response = _stats((await session.execute(_FIRST_RESPONSE, window)).one())
     resolution = _stats((await session.execute(_RESOLUTION, window)).one())
-    backlog_rows = {
-        r.status: r.n
-        for r in await session.execute(_BACKLOG, {"statuses": [s.value for s in _BACKLOG_STATUSES]})
-    }
+    backlog_statuses = {"statuses": [s.value for s in _BACKLOG_STATUSES]}
+    backlog_rows = {r.status: r.n for r in await session.execute(_BACKLOG, backlog_statuses)}
     breaches = (await session.execute(_BREACHES, {**window, "now": now})).one()
+    org_rows = list(await session.execute(_BACKLOG_BY_ORG, backlog_statuses))
+    no_org_n = (await session.execute(_BACKLOG_NO_ORG, backlog_statuses)).scalar() or 0
 
     return AnalyticsSummary(
         from_date=from_date,
@@ -169,4 +193,8 @@ async def summary(
         resolution=resolution,
         backlog=[StatusCount(status=s, count=backlog_rows.get(s.value, 0)) for s in _BACKLOG_STATUSES],
         sla_breaches=Breaches(total=breaches.total, response=breaches.response, resolution=breaches.resolution),
+        backlog_by_organization=[
+            *(OrganizationCount(name=r.name, count=r.n) for r in org_rows),
+            OrganizationCount(name="No organisation", count=no_org_n),
+        ],
     )

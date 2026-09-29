@@ -1,5 +1,6 @@
 import pytest
 import pytest_asyncio
+from sqlalchemy import text
 
 from app import seed as seed_module
 from tests.helpers import auth, register
@@ -54,3 +55,20 @@ async def test_search_is_capped_and_every_result_matches(client, token):
 async def test_kb_requires_auth_and_unknown_article_is_404(client, token):
     assert (await client.get("/kb/search", params={"q": "password"})).status_code == 401
     assert (await client.get("/kb/articles/nope", headers=auth(token))).status_code == 404
+
+
+async def test_search_expression_has_a_gin_index(db_session):
+    """Without this index, /kb/search recomputes to_tsvector(title || body)
+    for every row on every call - fine at 5 seeded articles, but an O(n)
+    sequential scan once the knowledge base grows."""
+    row = (
+        await db_session.execute(
+            text(
+                "SELECT indexdef FROM pg_indexes "
+                "WHERE tablename = 'knowledge_base_articles' AND indexname = 'ix_knowledge_base_articles_search'"
+            )
+        )
+    ).first()
+    assert row is not None, "ix_knowledge_base_articles_search is missing"
+    assert "gin" in row[0].lower()
+    assert "to_tsvector" in row[0].lower()

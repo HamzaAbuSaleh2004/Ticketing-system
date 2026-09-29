@@ -18,6 +18,7 @@ type Summary = {
   resolution: { median_seconds: number | null; avg_seconds: number | null; count: number };
   backlog: { status: TicketStatus; count: number }[];
   sla_breaches: { total: number; response: number; resolution: number };
+  backlog_by_organization: { name: string; count: number }[];
 };
 
 const RANGES = [7, 30, 90] as const;
@@ -146,6 +147,17 @@ export function DashboardPage() {
               <BarChart
                 caption="Backlog by status"
                 points={s.backlog.map((b) => ({ key: b.status, label: STATUS_LABEL[b.status], value: b.count }))}
+              />
+            </ChartCard>
+          </Box>
+
+          <Box sx={{ mt: 1 }}>
+            <ChartCard title="Open tickets by organisation" subtitle="Current backlog, top 10 plus tickets with no organisation">
+              <BarChart
+                caption="Open tickets by organisation"
+                labelHeader="Organisation"
+                labelWidth={220}
+                points={s.backlog_by_organization.map((o) => ({ key: o.name, label: o.name, value: o.count }))}
               />
             </ChartCard>
           </Box>

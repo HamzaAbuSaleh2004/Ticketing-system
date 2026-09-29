@@ -90,3 +90,12 @@ export function compactAgo(iso: string, now: Date = new Date()): string {
 
 export const absoluteTime = (iso: string) =>
   new Date(iso).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
+
+/** "Customer 2", "LiverX 1", "Customer 1, LiverX 2", or null when nothing's
+ * open on either side — as text, not colour alone, per the brief's queue rule. */
+export function waitingOnText(openCustomerItems: number, openLiverxItems: number): string | null {
+  const parts: string[] = [];
+  if (openCustomerItems > 0) parts.push(`Customer ${openCustomerItems}`);
+  if (openLiverxItems > 0) parts.push(`LiverX ${openLiverxItems}`);
+  return parts.length ? parts.join(", ") : null;
+}

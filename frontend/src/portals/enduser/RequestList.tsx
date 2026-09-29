@@ -75,6 +75,11 @@ export function RequestList({ items, isLoading, isError, onRetry }: Props) {
               <Typography variant="bodyMedium" component="span" sx={{ display: "block", color: sys("onSurfaceVariant") }}>
                 {CUSTOMER_STATUS[t.status].line}
               </Typography>
+              {t.open_customer_items > 0 ? (
+                <Typography variant="labelLarge" component="span" sx={{ display: "block", color: sys("tertiary") }}>
+                  Waiting on you: {t.open_customer_items} item{t.open_customer_items === 1 ? "" : "s"}
+                </Typography>
+              ) : null}
             </Box>
             <Box sx={{ gridArea: "status", justifySelf: { xs: "start", sm: "end" } }}>
               <CustomerStatusChip status={t.status} />

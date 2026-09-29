@@ -1,12 +1,13 @@
 import TrendingUpOutlined from "@mui/icons-material/TrendingUpOutlined";
 import { Box, Button, Divider, ListItemText, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { useAuth } from "../../auth/AuthContext";
-import { useCategories, useCategoryName, useStaff } from "../../api/hooks";
+import { useCategories, useCategoryName, useOrganizations, useStaff } from "../../api/hooks";
 import type { TicketDetail, TicketPatch, TicketPriority } from "../../api/types";
 import { SlaIndicator } from "../../components/SlaIndicator";
 import { statusHint, statusOptions } from "../../lib/lifecycle";
 import { PRIORITY_LABEL, STATUS_LABEL, absoluteTime } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
+import { ActionItemsSection } from "./ActionItemsSection";
 import { AuditTrail } from "./AuditTrail";
 
 const PRIORITIES: TicketPriority[] = ["urgent", "high", "normal", "low"];
@@ -38,6 +39,7 @@ export function TicketSidePanel({
   const staff = useStaff();
   const categories = useCategories();
   const categoryName = useCategoryName();
+  const organizations = useOrganizations();
   const options = statusOptions(ticket.status, ticket.allowed_transitions, ticket.assignee_id);
   const locked = ticket.status === "closed";
   const canEscalate = !["resolved", "closed"].includes(ticket.status);
@@ -151,6 +153,35 @@ export function TicketSidePanel({
           </TextField>
         </Stack>
 
+        <TextField
+          select
+          label="Organisation"
+          size="small"
+          fullWidth
+          value={ticket.organization_id ?? ""}
+          disabled={patching || locked}
+          onChange={(e) => onPatch({ organization_id: e.target.value === "" ? null : Number(e.target.value) })}
+          slotProps={{
+            select: {
+              displayEmpty: true,
+              renderValue: (v) =>
+                v === ""
+                  ? "None"
+                  : ((organizations.data ?? []).find((o) => o.id === v)?.name ?? ticket.organization_name ?? ""),
+            },
+            inputLabel: { shrink: true },
+          }}
+        >
+          <MenuItem value="">None</MenuItem>
+          {(organizations.data ?? [])
+            .filter((o) => o.active || o.id === ticket.organization_id)
+            .map((o) => (
+              <MenuItem key={o.id} value={o.id}>
+                <ListItemText primary={o.name} secondary={o.kind === "government" ? "Government" : "Company"} />
+              </MenuItem>
+            ))}
+        </TextField>
+
         <Box>
           <Button
             variant="outlined"
@@ -171,6 +202,10 @@ export function TicketSidePanel({
           </Typography>
         </Box>
       </Stack>
+
+      <Divider />
+
+      <ActionItemsSection ticket={ticket} />
 
       <Divider />
 

@@ -11,6 +11,8 @@ from app.db import SessionLocal
 from app.models import (
     Category,
     KnowledgeBaseArticle,
+    Organization,
+    OrganizationKind,
     SlaPolicy,
     Team,
     TicketPriority,
@@ -28,12 +30,25 @@ SEED_PASSWORD = "ChangeMe123!"
 DEMO_TOTP_SECRET = "LIVERXDEMOTOTPSECRETFORLOCALONLY"
 
 USERS = [
-    {"email": "admin@ticketing.demo", "name": "Ada Admin", "role": UserRole.admin, "team": None},
-    {"email": "agent1@ticketing.demo", "name": "Tara Tier1", "role": UserRole.agent, "team": Team.tier1},
-    {"email": "agent2@ticketing.demo", "name": "Tom Tier1", "role": UserRole.agent, "team": Team.tier1},
-    {"email": "agent3@ticketing.demo", "name": "Sasha Senior", "role": UserRole.agent, "team": Team.senior},
-    {"email": "user1@ticketing.demo", "name": "Uma User", "role": UserRole.end_user, "team": None},
-    {"email": "user2@ticketing.demo", "name": "Leo Client", "role": UserRole.end_user, "team": None},
+    {"email": "admin@ticketing.demo", "name": "Ada Admin", "role": UserRole.admin, "team": None, "organization": None},
+    {"email": "agent1@ticketing.demo", "name": "Tara Tier1", "role": UserRole.agent, "team": Team.tier1, "organization": None},
+    {"email": "agent2@ticketing.demo", "name": "Tom Tier1", "role": UserRole.agent, "team": Team.tier1, "organization": None},
+    {"email": "agent3@ticketing.demo", "name": "Sasha Senior", "role": UserRole.agent, "team": Team.senior, "organization": None},
+    {"email": "user1@ticketing.demo", "name": "Uma User", "role": UserRole.end_user, "team": None,
+     "organization": "Meridian Retail Group"},
+    {"email": "user2@ticketing.demo", "name": "Leo Client", "role": UserRole.end_user, "team": None,
+     "organization": "Ministry of Public Works"},
+]
+
+# Phase 12 addition: which organisation each ticket's customer belongs to.
+# Realistic company + government mix; only the first two are used by the
+# seeded demo end users (above), the other two exist so the org picker and
+# filter aren't a one-item list.
+ORGANIZATIONS = [
+    {"name": "Meridian Retail Group", "kind": OrganizationKind.company},
+    {"name": "Ministry of Public Works", "kind": OrganizationKind.government},
+    {"name": "Harborline Logistics", "kind": OrganizationKind.company},
+    {"name": "City Transit Authority", "kind": OrganizationKind.government},
 ]
 
 SLA_POLICIES = [
@@ -141,11 +156,21 @@ KB_ARTICLES = [
 ]
 
 
+async def seed_organizations(session: AsyncSession) -> None:
+    for o in ORGANIZATIONS:
+        existing = await session.scalar(select(Organization).where(Organization.name == o["name"]))
+        if existing:
+            continue
+        session.add(Organization(name=o["name"], kind=o["kind"], active=True))
+    await session.commit()
+
+
 async def seed_users(session: AsyncSession) -> None:
     # The demo accounts share a published password: never create them in prod.
     if get_settings().ENV == "prod":
         logger.info("seed: ENV=prod, skipping the demo accounts")
         return
+    org_ids = {o.name: o.id for o in await session.scalars(select(Organization))}
     for u in USERS:
         existing = await session.scalar(select(User).where(User.email == u["email"]))
         if existing:
@@ -156,6 +181,7 @@ async def seed_users(session: AsyncSession) -> None:
                 name=u["name"],
                 role=u["role"],
                 team=u["team"],
+                organization_id=org_ids.get(u["organization"]) if u["organization"] else None,
                 password_hash=hash_password(SEED_PASSWORD),
                 totp_secret=DEMO_TOTP_SECRET,
                 # Real time: it's compared with access tokens' `iat`.
@@ -193,6 +219,7 @@ async def seed_kb_articles(session: AsyncSession) -> None:
 
 async def main() -> None:
     async with SessionLocal() as session:
+        await seed_organizations(session)
         await seed_users(session)
         await seed_sla_policies(session)
         await seed_categories(session)

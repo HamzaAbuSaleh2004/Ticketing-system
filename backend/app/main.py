@@ -14,6 +14,7 @@ from app.routers.attachments import router as attachments_router
 from app.routers.auth import router as auth_router
 from app.routers.categories import router as categories_router
 from app.routers.kb import router as kb_router
+from app.routers.organizations import router as organizations_router
 from app.routers.tickets import router as tickets_router
 from app.routers.users import router as users_router
 
@@ -39,6 +40,7 @@ app.include_router(tickets_router)
 app.include_router(attachments_router)
 app.include_router(kb_router)
 app.include_router(categories_router)
+app.include_router(organizations_router)
 app.include_router(users_router)
 app.include_router(admin_router)
 app.include_router(analytics_router)
