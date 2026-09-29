@@ -152,6 +152,31 @@ async def test_download_is_scoped_and_internal_note_attachments_never_reach_end_
     assert {a["id"] for a in as_agent["attachments"]} == {public["id"], internal["id"]}
 
 
+async def test_download_with_a_non_ascii_filename(client):
+    token = await _register(client, "attach-unicode@example.com")
+    ticket_id = (
+        await client.post(
+            "/tickets", json={"subject": "Unicode filename", "description": "see attached"},
+            headers=_auth(token),
+        )
+    ).json()["id"]
+
+    uploaded = (
+        await client.post(
+            f"/tickets/{ticket_id}/attachments",
+            files={"file": ("تقرير.txt", b"hello", "text/plain")},
+            headers=_auth(token),
+        )
+    ).json()
+
+    resp = await client.get(f"/attachments/{uploaded['id']}", headers=_auth(token))
+    assert resp.status_code == 200
+    assert resp.content == b"hello"
+    disposition = resp.headers["content-disposition"]
+    assert disposition.startswith("attachment;")
+    assert "filename*=UTF-8''" in disposition
+
+
 async def test_upload_body_cap_type_sniffing_and_comment_ownership(client, db_session, monkeypatch):
     from app.config import get_settings
 

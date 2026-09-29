@@ -42,6 +42,14 @@ async def test_a_token_google_rejects_is_401(client, monkeypatch):
     assert resp.status_code == 401
 
 
+async def test_a_transport_failure_verifying_the_token_is_503_not_401(client, monkeypatch):
+    from google.auth import exceptions as google_exceptions
+
+    _mock_verify(monkeypatch, error=google_exceptions.TransportError("network blip"))
+    resp = await client.post("/internal/sweeps", headers={"Authorization": "Bearer whatever"})
+    assert resp.status_code == 503
+
+
 async def test_wrong_caller_email_is_403(client, monkeypatch):
     _mock_verify(monkeypatch, claims={"email": "someone-else@x.iam.gserviceaccount.com", "email_verified": True})
     resp = await client.post("/internal/sweeps", headers={"Authorization": "Bearer whatever"})

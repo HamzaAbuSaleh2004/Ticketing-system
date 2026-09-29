@@ -41,10 +41,16 @@ def upgrade() -> None:
 def downgrade() -> None:
     base = get_settings().ATTACHMENTS_DIR.rstrip("/") + "/"
     conn = op.get_bind()
+    # Only re-prefix rows shaped like upload_attachment's own key convention
+    # ("<ticket_id>/<uuid>_<filename>"), the same set upgrade() could have
+    # touched. A row upgrade() deliberately left alone — already relative
+    # under some other historical directory, or just not matching the
+    # current ATTACHMENTS_DIR prefix — must stay untouched here too, or a
+    # downgrade corrupts a path it never actually changed.
     conn.execute(
         sa.text(
             "UPDATE attachments SET file_path = :base || file_path "
-            "WHERE file_path NOT LIKE '/%'"
+            "WHERE file_path ~ '^[0-9]+/'"
         ),
         {"base": base},
     )

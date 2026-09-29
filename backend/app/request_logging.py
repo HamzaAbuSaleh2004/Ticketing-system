@@ -21,17 +21,25 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         started = time.monotonic()
-        response = await call_next(request)
-        latency_ms = round((time.monotonic() - started) * 1000, 1)
-        logger.info(
-            json.dumps(
-                {
-                    "method": request.method,
-                    "path": request.url.path,
-                    "status": response.status_code,
-                    "latency_ms": latency_ms,
-                    "user_id": getattr(request.state, "user_id", None),
-                }
+        status_code = 500
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            return response
+        finally:
+            # An unhandled exception downstream is exactly the request most
+            # worth a log line for, and call_next re-raises it before this
+            # middleware would otherwise ever get to log — so this runs on
+            # every exit, not just the success path.
+            latency_ms = round((time.monotonic() - started) * 1000, 1)
+            logger.info(
+                json.dumps(
+                    {
+                        "method": request.method,
+                        "path": request.url.path,
+                        "status": status_code,
+                        "latency_ms": latency_ms,
+                        "user_id": getattr(request.state, "user_id", None),
+                    }
+                )
             )
-        )
-        return response

@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from sqlalchemy import select
@@ -42,15 +44,20 @@ async def download_attachment(
         raise not_found from None
 
     # A hand-set Content-Disposition (not FileResponse, since GCS has no local
-    # path to hand it): the filename was already sanitised to a bare name at
-    # upload time (no path separators), and quotes are stripped so they can't
-    # break out of the quoted-string header value.
-    safe_filename = attachment.filename.replace('"', "")
+    # path to hand it). HTTP header values are Latin-1 only, so a non-ASCII
+    # filename (an Arabic ticket attachment, an emoji, ...) can't just be
+    # dropped into `filename="..."` — it has to go through the same
+    # ASCII-fallback-plus-RFC-5987 `filename*=` pair FileResponse itself
+    # builds, or the header encoding raises and the download 500s instead of
+    # sending the file. Quotes are stripped from the fallback so they can't
+    # break out of the quoted-string value.
+    ascii_filename = attachment.filename.encode("ascii", "replace").decode("ascii").replace('"', "")
+    encoded_filename = quote(attachment.filename)
     return Response(
         content=data,
         media_type=attachment.content_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{safe_filename}"',
+            "Content-Disposition": f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{encoded_filename}",
             "X-Content-Type-Options": "nosniff",
         },
     )

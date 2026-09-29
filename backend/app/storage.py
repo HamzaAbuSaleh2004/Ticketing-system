@@ -10,6 +10,7 @@ visibility on every request, the same as before this split existed."""
 from __future__ import annotations
 
 import asyncio
+from functools import lru_cache
 from pathlib import Path
 from typing import Protocol
 
@@ -52,6 +53,18 @@ class LocalStorage:
         self._resolve(key).unlink(missing_ok=True)
 
 
+@lru_cache
+def _gcs_client():
+    # Cached process-wide: constructing a client resolves ADC (a real
+    # metadata-server round trip on Cloud Run), so building a fresh one on
+    # every request would put that latency on the request path repeatedly
+    # instead of once. A test that wants a fake client passes one to
+    # GcsStorage directly instead of going through this cache at all.
+    from google.cloud import storage as gcs
+
+    return gcs.Client()
+
+
 class GcsStorage:
     """Cloud Storage backend. Credentials are Application Default Credentials
     (the Cloud Run service account in prod) — never a downloaded key file.
@@ -59,12 +72,8 @@ class GcsStorage:
     worker thread rather than blocking the event loop."""
 
     def __init__(self, bucket_name: str, client=None) -> None:
-        if client is None:
-            from google.cloud import storage as gcs
-
-            client = gcs.Client()
-        self._client = client
-        self._bucket = client.bucket(bucket_name)
+        self._client = client or _gcs_client()
+        self._bucket = self._client.bucket(bucket_name)
 
     def _save_sync(self, key: str, data: bytes, content_type: str) -> None:
         blob = self._bucket.blob(key)
@@ -106,9 +115,9 @@ def build_storage(settings: Settings) -> Storage:
 
 
 def get_storage() -> Storage:
-    """FastAPI dependency. Built fresh per call (cheap for both backends —
-    `LocalStorage` is a `Path`, and the GCS client is a lightweight handle
-    with no network call at construction time), so a test overriding
+    """FastAPI dependency. The `Storage` wrapper itself is built fresh per
+    call — cheap for both backends, since the underlying GCS client is
+    cached separately (`_gcs_client`) — so a test overriding
     `ATTACHMENTS_BACKEND`/`ATTACHMENTS_BUCKET` on the live settings singleton
     takes effect on the next request instead of a stale cached instance."""
     return build_storage(get_settings())

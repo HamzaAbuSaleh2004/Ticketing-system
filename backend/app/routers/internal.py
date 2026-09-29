@@ -31,6 +31,7 @@ def _verify_scheduler_token(authorization: str | None) -> None:
     # it out of the module's top-level import list keeps a plain local
     # `docker compose up` from needing them installed just to boot the API
     # when nothing ever calls this endpoint.
+    from google.auth import exceptions as google_exceptions
     from google.auth.transport import requests as google_requests
     from google.oauth2 import id_token as google_id_token
 
@@ -38,10 +39,17 @@ def _verify_scheduler_token(authorization: str | None) -> None:
         claims = google_id_token.verify_oauth2_token(
             token, google_requests.Request(), audience=settings.SWEEP_AUDIENCE
         )
+    except (google_exceptions.TransportError, google_exceptions.TimeoutError) as exc:
+        # Couldn't even reach Google to check the token (egress hiccup,
+        # fetching its public certs timed out, ...) — the token itself is
+        # neither confirmed nor refuted, so this isn't the same thing as an
+        # invalid token: a 503 tells Scheduler's own retry to try again,
+        # rather than logging it identically to an actual forged caller.
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not verify token") from exc
     except Exception as exc:
         # verify_oauth2_token raises a plain ValueError for most failures
         # (bad signature, expired, wrong audience) and GoogleAuthError for a
-        # bad issuer; either way the token is untrusted, so it's a 401.
+        # bad issuer; either way the token itself is untrusted, so it's a 401.
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
 
     if claims.get("email") != settings.SWEEP_INVOKER_EMAIL:
