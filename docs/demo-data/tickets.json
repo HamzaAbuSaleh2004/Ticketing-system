@@ -107,6 +107,7 @@
       "priority": "low",
       "category": "data-privacy",
       "created_minutes_ago": 3000,
+      "pending_minutes": 1200,
       "ai_summary": "Procurement asking for the subprocessor list and data locations.",
       "comments": [
         {
@@ -263,6 +264,7 @@
       "priority": "normal",
       "category": "technical-issue",
       "created_minutes_ago": 1400,
+      "pending_minutes": 300,
       "ai_summary": "Report builder errors when a created-date filter is added (RB-5521-A).",
       "comments": [
         {
@@ -454,6 +456,7 @@
       "priority": "high",
       "category": "account-login",
       "created_minutes_ago": 240,
+      "pending_minutes": 150,
       "ai_summary": "Authenticator codes rejected after moving the app to a new phone.",
       "comments": [
         {

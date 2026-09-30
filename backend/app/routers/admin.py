@@ -1,11 +1,11 @@
-"""Admin settings: users (role/team), categories, and the audit trail of
-those changes. Every write is audit-logged."""
+"""Admin settings: users (role/team), categories, global SLA policies, and
+the audit trail of those changes. Every write is audit-logged."""
 
 import re
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,14 +16,17 @@ from app.config import get_settings
 from app.db import get_db
 from app.domain.audit import write_audit
 from app.domain.staff import is_allowed_staff_email
-from app.models import AuditLog, Category, Organization, Ticket, User
-from app.models.enums import Team, UserRole
+from app.models import AuditLog, Category, Organization, SlaPolicy, Ticket, User
+from app.models.enums import Team, TicketPriority, UserRole
 from app.schemas.auth import check_password_bytes, normalize_email
 from app.schemas.category import CategoryOut
 from app.services.tickets import ACTIVE_STATUSES
 
 router = APIRouter(tags=["admin"])
 _admin = require_role(UserRole.admin)
+_staff = require_role(UserRole.agent, UserRole.admin)
+
+MAX_SLA_MINUTES = 60 * 24 * 90
 
 
 class AdminUserOut(BaseModel):
@@ -89,11 +92,33 @@ class CategoryPatch(BaseModel):
     _name = field_validator("name")(_clean_name)
 
 
+class SlaPolicyOut(BaseModel):
+    id: int
+    name: str
+    priority: TicketPriority
+    response_minutes: int
+    resolution_minutes: int
+
+    model_config = {"from_attributes": True}
+
+
+class SlaPolicyPatch(BaseModel):
+    response_minutes: int = Field(ge=1, le=MAX_SLA_MINUTES)
+    resolution_minutes: int = Field(ge=1, le=MAX_SLA_MINUTES)
+
+    @model_validator(mode="after")
+    def _response_within_resolution(self):
+        if self.response_minutes > self.resolution_minutes:
+            raise ValueError("The first-reply target can't be longer than the resolution target")
+        return self
+
+
 class AdminAuditOut(BaseModel):
     id: int
     entity_type: str
     entity_id: int
-    # What was changed, by name: the user, the category, or the organisation.
+    # What was changed, by name: the user, the category, the SLA priority, or
+    # the organisation.
     subject: str | None
     actor_name: str | None
     action: str
@@ -300,15 +325,51 @@ async def patch_category(
     return CategoryOut.model_validate(category)
 
 
+# --- SLA policies (global defaults; per-organisation overrides live under
+# /organizations/{id}/sla-policies) -----------------------------------------
+
+
+@router.get("/sla-policies", response_model=list[SlaPolicyOut])
+async def list_sla_policies(user: User = Depends(_staff), session: AsyncSession = Depends(get_db)) -> list[SlaPolicyOut]:
+    rows = (
+        await session.scalars(select(SlaPolicy).where(SlaPolicy.organization_id.is_(None)))
+    ).all()
+    order = list(TicketPriority)[::-1]  # urgent first
+    return [SlaPolicyOut.model_validate(p) for p in sorted(rows, key=lambda p: order.index(p.priority))]
+
+
+@router.patch("/sla-policies/{priority}", response_model=SlaPolicyOut)
+async def patch_sla_policy(
+    priority: TicketPriority, body: SlaPolicyPatch, admin: User = Depends(_admin), session: AsyncSession = Depends(get_db)
+) -> SlaPolicyOut:
+    """Applies to tickets created after the change (and to an existing ticket
+    only if its priority later changes); existing due dates are not
+    recomputed. Only the global default — an organisation's own override is
+    managed under /organizations/{id}/sla-policies."""
+    policy = await session.scalar(
+        select(SlaPolicy).where(SlaPolicy.organization_id.is_(None), SlaPolicy.priority == priority)
+    )
+    if policy is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="SLA policy not found")
+    before, after = _diff(policy, body.model_dump())
+    if before:
+        await write_audit(
+            session, entity_type="sla_policy", entity_id=policy.id, actor_id=admin.id,
+            action="sla_policy.updated", diff={"before": before, "after": after, "priority": priority.value},
+        )
+        await session.commit()
+    return SlaPolicyOut.model_validate(policy)
+
+
 # --- audit of admin changes ------------------------------------------------
 
 
-_ADMIN_AUDIT_ENTITIES = ("user", "category", "organization")
+_ADMIN_AUDIT_ENTITIES = ("user", "category", "sla_policy", "organization")
 
 
 @router.get("/admin/audit", response_model=list[AdminAuditOut])
 async def admin_audit(
-    entity_type: Literal["user", "category", "organization"] | None = None,
+    entity_type: Literal["user", "category", "sla_policy", "organization"] | None = None,
     limit: int = Query(50, ge=1, le=200),
     admin: User = Depends(_admin),
     session: AsyncSession = Depends(get_db),
@@ -327,6 +388,8 @@ async def admin_audit(
         names["user", u.id] = u.name
     for c in await session.scalars(select(Category).where(Category.id.in_(ids["category"]))):
         names["category", c.id] = c.name
+    for p in await session.scalars(select(SlaPolicy).where(SlaPolicy.id.in_(ids["sla_policy"]))):
+        names["sla_policy", p.id] = p.priority.value
     for o in await session.scalars(select(Organization).where(Organization.id.in_(ids["organization"]))):
         names["organization", o.id] = o.name
     return [

@@ -51,6 +51,8 @@ export type TicketListItem = {
   requester_id: number | null;
   assignee_id: number | null;
   escalated: boolean;
+  sla_response_due: string | null;
+  sla_resolution_due: string | null;
   created_at: string;
   updated_at: string;
   organization_id: number | null;
@@ -83,6 +85,7 @@ export type Attachment = {
 
 export type TicketDetailPublic = TicketListItem & {
   description: string;
+  sla_paused_at: string | null;
   first_responded_at: string | null;
   parent_ticket_id: number | null;
   resolved_at: string | null;
@@ -98,7 +101,9 @@ export type Collaborator = { user_id: number; name: string };
 export type TicketQueueItem = TicketListItem & {
   requester_name: string | null;
   assignee_name: string | null;
+  sla_paused_at: string | null;
   first_responded_at: string | null;
+  sla_paused_total_seconds: number;
   collaborators: Collaborator[];
 };
 
@@ -114,6 +119,7 @@ export type AuditEntry = {
 };
 
 export type TicketDetail = TicketDetailPublic & {
+  sla_paused_total_seconds: number;
   requester_name: string | null;
   requester_email: string | null;
   assignee_name: string | null;

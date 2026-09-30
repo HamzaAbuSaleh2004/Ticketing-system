@@ -1,5 +1,6 @@
-"""The worker sweeps, every SWEEP_INTERVAL_SECONDS: auto-close of resolved
-tickets past the reopen window, and pruning old login-attempt rows."""
+"""The worker sweeps, every SWEEP_INTERVAL_SECONDS: auto-escalation of
+at-risk urgent/high tickets, auto-close of resolved tickets past the reopen
+window, and pruning old login-attempt rows."""
 
 import asyncio
 import logging
@@ -10,7 +11,7 @@ from app import models  # noqa: F401 -- registers models on Base.metadata
 from app.config import get_settings
 from app.db import SessionLocal
 from app.domain import clock
-from app.services.sweeps import auto_close_sweep, prune_login_attempts
+from app.services.sweeps import auto_close_sweep, prune_login_attempts, sla_risk_sweep
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ async def run_sweeps_once(now: datetime) -> dict[str, list[int]]:
     call — same as the loop below always moving on to the next sweep."""
     cooloff_hours = get_settings().RESOLVED_COOLOFF_HOURS
     sweeps = {
+        "sla-risk": partial(sla_risk_sweep, now=now),
         "auto-close": partial(auto_close_sweep, now=now, cooloff_hours=cooloff_hours),
         "prune-login-attempts": partial(prune_login_attempts, now=now),
     }

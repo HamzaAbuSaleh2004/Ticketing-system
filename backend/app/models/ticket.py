@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -39,7 +39,14 @@ class Ticket(Base):
     requester_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
 
-    # §2 addition: first-response-time analytics.
+    sla_response_due: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sla_resolution_due: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # §2 addition: the resolution clock pauses while status = pending.
+    sla_paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sla_paused_total_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # §2 addition: first-response-time analytics + the response SLA.
     first_responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # §2 addition: the linked follow-up ticket created when a customer replies on a closed ticket.

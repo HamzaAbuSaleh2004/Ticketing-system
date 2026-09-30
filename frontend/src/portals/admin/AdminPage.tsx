@@ -1,20 +1,27 @@
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, MenuItem, Snackbar, Stack, Switch, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, TextField, Tooltip, Typography } from "@mui/material";
+import ExpandLessOutlined from "@mui/icons-material/ExpandLessOutlined";
+import ExpandMoreOutlined from "@mui/icons-material/ExpandMoreOutlined";
+import { Alert, Box, Button, Collapse, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, IconButton, MenuItem, Snackbar, Stack, Switch, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, TextField, Tooltip, Typography } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, errorMessage } from "../../api/client";
 import { useOrganizations } from "../../api/hooks";
-import type { Category, Organization, OrganizationKind, Role, Team, User } from "../../api/types";
+import type { Category, Organization, OrganizationKind, Role, Team, TicketPriority, User } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
 import { MIN_PASSWORD } from "../../auth/RegisterPage";
-import { absoluteTime, relativeTime } from "../../lib/tickets";
+import { PRIORITY_SHORT, absoluteTime, relativeTime } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
 
 type AdminUser = User & { two_factor_enabled: boolean; organization_id: number | null };
+type SlaPolicy = { id: number; name: string; priority: TicketPriority; response_minutes: number; resolution_minutes: number };
+type OrgSlaPolicy = { priority: TicketPriority; response_minutes: number; resolution_minutes: number; is_override: boolean };
 type AdminAudit = { id: number; entity_type: string; entity_id: number; subject: string | null; actor_name: string | null; action: string; diff_json: { before?: Record<string, unknown>; after?: Record<string, unknown> } | null; created_at: string };
 
-const TABS = ["users", "organizations", "categories", "changes"] as const;
+const TABS = ["users", "organizations", "categories", "sla", "changes"] as const;
 type TabKey = (typeof TABS)[number];
+const SLA_PRIORITY_ORDER: TicketPriority[] = ["urgent", "high", "normal", "low"];
+const hoursLabel = (m: number) => (m >= 60 ? `${+(m / 60).toFixed(1)}h` : `${m} min`);
+const validSlaTargets = (r: number, s: number) => Number.isInteger(r) && Number.isInteger(s) && r >= 1 && s >= 1 && r <= s;
 const ROLE_LABEL: Record<Role, string> = { end_user: "End user", agent: "Agent", admin: "Admin" };
 const TEAM_LABEL: Record<Team, string> = { tier1: "Tier 1", senior: "Senior" };
 const KIND_LABEL: Record<OrganizationKind, string> = { company: "Company", government: "Government" };
@@ -45,7 +52,7 @@ function QueryState({ query, children }: { query: { isLoading: boolean; isError:
   return <>{children}</>;
 }
 
-function useSave(onDone: (msg: string) => void, keys: string[][]) {
+function useSave(onDone: (msg: string) => void, keys: (string | number)[][]) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ path, method, body }: { path: string; method: string; body: unknown; msg: string }) => api(path, { method, body }),
@@ -308,14 +315,128 @@ function UsersTab({ notify }: { notify: (m: string) => void }) {
   );
 }
 
+function OrgSlaOverrideRow({ orgId, policy, notify }: { orgId: number; policy: OrgSlaPolicy; notify: (m: string) => void }) {
+  const save = useSave(notify, [["organizations", orgId, "sla-policies"]]);
+  const [editing, setEditing] = useState(false);
+  const [response, setResponse] = useState(String(policy.response_minutes));
+  const [resolution, setResolution] = useState(String(policy.resolution_minutes));
+  useEffect(() => {
+    setResponse(String(policy.response_minutes));
+    setResolution(String(policy.resolution_minutes));
+    setEditing(false);
+  }, [policy.response_minutes, policy.resolution_minutes]);
+  const r = Number(response);
+  const s = Number(resolution);
+  const valid = validSlaTargets(r, s);
+
+  return (
+    <Stack direction="row" sx={{ alignItems: "center", gap: 1.5, py: 0.75, flexWrap: "wrap" }}>
+      <Typography variant="bodyMedium" sx={{ width: 64, flexShrink: 0 }}>
+        {PRIORITY_SHORT[policy.priority]}
+      </Typography>
+      {editing ? (
+        <>
+          <TextField
+            size="small" type="number" label="First reply (min)" value={response}
+            onChange={(e) => setResponse(e.target.value)} sx={{ width: 150 }}
+            slotProps={{ htmlInput: { min: 1, "aria-label": `First reply (min) override for ${PRIORITY_SHORT[policy.priority]}` } }}
+          />
+          <TextField
+            size="small" type="number" label="Resolve (min)" value={resolution}
+            onChange={(e) => setResolution(e.target.value)} sx={{ width: 150 }}
+            error={!valid}
+            helperText={!valid ? "First reply can't exceed resolution" : undefined}
+            slotProps={{ htmlInput: { min: 1, "aria-label": `Resolve (min) override for ${PRIORITY_SHORT[policy.priority]}` } }}
+          />
+          <Button
+            size="small"
+            disabled={!valid || save.isPending}
+            onClick={() =>
+              save.mutate(
+                {
+                  path: `/organizations/${orgId}/sla-policies/${policy.priority}`, method: "PUT",
+                  body: { response_minutes: r, resolution_minutes: s }, msg: `${PRIORITY_SHORT[policy.priority]} override saved`,
+                },
+                { onSuccess: () => setEditing(false) },
+              )
+            }
+          >
+            Save
+          </Button>
+          <Button size="small" onClick={() => setEditing(false)} disabled={save.isPending}>
+            Cancel
+          </Button>
+        </>
+      ) : (
+        <>
+          <Typography variant="bodyMedium" sx={{ color: sys("onSurfaceVariant"), flex: 1, minWidth: 220 }}>
+            {policy.is_override
+              ? `Override: ${hoursLabel(policy.response_minutes)} reply / ${hoursLabel(policy.resolution_minutes)} resolve`
+              : `Using default (${hoursLabel(policy.response_minutes)} reply / ${hoursLabel(policy.resolution_minutes)} resolve)`}
+          </Typography>
+          <Button size="small" onClick={() => setEditing(true)} disabled={save.isPending}>
+            Override
+          </Button>
+          {policy.is_override ? (
+            <Button
+              size="small"
+              disabled={save.isPending}
+              onClick={() =>
+                save.mutate({
+                  path: `/organizations/${orgId}/sla-policies/${policy.priority}`, method: "DELETE", body: undefined,
+                  msg: `${PRIORITY_SHORT[policy.priority]} reset to default`,
+                })
+              }
+            >
+              Reset to default
+            </Button>
+          ) : null}
+        </>
+      )}
+    </Stack>
+  );
+}
+
+function OrgSlaOverrides({ orgId, notify }: { orgId: number; notify: (m: string) => void }) {
+  const policies = useQuery({
+    queryKey: ["organizations", orgId, "sla-policies"],
+    queryFn: () => api<OrgSlaPolicy[]>(`/organizations/${orgId}/sla-policies`),
+  });
+  const byPriority = new Map((policies.data ?? []).map((p) => [p.priority, p]));
+  return (
+    <Box sx={{ py: 1 }}>
+      <QueryState query={policies}>
+      <Stack divider={<Box sx={{ borderBottom: `1px solid ${sys("outlineVariant")}` }} />}>
+        {SLA_PRIORITY_ORDER.map((priority) => {
+          const policy = byPriority.get(priority);
+          return policy ? <OrgSlaOverrideRow key={priority} orgId={orgId} policy={policy} notify={notify} /> : null;
+        })}
+      </Stack>
+      </QueryState>
+    </Box>
+  );
+}
+
 function OrganizationRow({ org, notify }: { org: Organization; notify: (m: string) => void }) {
   const save = useSave(notify, [["organizations"]]);
   const [name, setName] = useState(org.name);
   useEffect(() => setName(org.name), [org.name]);
   const dirty = name.trim() !== org.name && name.trim().length > 0;
+  const [expanded, setExpanded] = useState(false);
 
   return (
+    <>
     <TableRow>
+      <TableCell sx={{ ...cellSx, width: 40 }}>
+        <IconButton
+          size="small"
+          onClick={() => setExpanded((v) => !v)}
+          aria-label={expanded ? `Hide SLA overrides for ${org.name}` : `Show SLA overrides for ${org.name}`}
+          aria-expanded={expanded}
+        >
+          {expanded ? <ExpandLessOutlined fontSize="small" /> : <ExpandMoreOutlined fontSize="small" />}
+        </IconButton>
+      </TableCell>
       <TableCell sx={cellSx}>
         <TextField
           size="small"
@@ -367,6 +488,17 @@ function OrganizationRow({ org, notify }: { org: Organization; notify: (m: strin
         </Button>
       </TableCell>
     </TableRow>
+    <TableRow>
+      <TableCell sx={{ py: 0, borderBottom: expanded ? undefined : "none" }} colSpan={5}>
+        <Collapse in={expanded} unmountOnExit>
+          <Typography variant="labelLarge" component="h3" sx={{ color: sys("onSurfaceVariant"), mt: 1 }}>
+            SLA overrides for {org.name}
+          </Typography>
+          {expanded ? <OrgSlaOverrides orgId={org.id} notify={notify} /> : null}
+        </Collapse>
+      </TableCell>
+    </TableRow>
+    </>
   );
 }
 
@@ -407,10 +539,14 @@ function OrganizationsTab({ notify }: { notify: (m: string) => void }) {
           Add organisation
         </Button>
       </Box>
+      <Typography variant="bodySmall" sx={{ color: sys("onSurfaceVariant"), display: "block", mb: 1 }}>
+        Expand a row to override its SLA targets per priority; anything left alone uses the global default.
+      </Typography>
       <QueryState query={organizations}>
       <Table size="small" aria-label="Organisations">
         <TableHead>
           <TableRow>
+            <TableCell sx={{ width: 40 }} />
             <TableCell>Name</TableCell>
             <TableCell sx={{ width: 180 }}>Kind</TableCell>
             <TableCell align="right" sx={{ width: 100 }}>Active</TableCell>
@@ -483,7 +619,95 @@ function CategoriesTab({ notify }: { notify: (m: string) => void }) {
   );
 }
 
-const ENTITY_LABEL: Record<string, string> = { user: "User", category: "Category", organization: "Organisation" };
+function SlaRow({ policy, notify }: { policy: SlaPolicy; notify: (m: string) => void }) {
+  const save = useSave(notify, [["sla-policies"]]);
+  const [response, setResponse] = useState(String(policy.response_minutes));
+  const [resolution, setResolution] = useState(String(policy.resolution_minutes));
+  useEffect(() => {
+    setResponse(String(policy.response_minutes));
+    setResolution(String(policy.resolution_minutes));
+  }, [policy.response_minutes, policy.resolution_minutes]);
+  const r = Number(response);
+  const s = Number(resolution);
+  const valid = validSlaTargets(r, s);
+  const dirty = r !== policy.response_minutes || s !== policy.resolution_minutes;
+
+  return (
+    <TableRow>
+      <TableCell sx={cellSx}>{PRIORITY_SHORT[policy.priority]}</TableCell>
+      {[
+        [response, setResponse, "First reply within", r],
+        [resolution, setResolution, "Resolve within", s],
+      ].map(([value, set, label, n]) => (
+        <TableCell key={label as string} sx={cellSx}>
+          <TextField
+            size="small"
+            type="number"
+            value={value as string}
+            onChange={(e) => (set as (v: string) => void)(e.target.value)}
+            slotProps={{ htmlInput: { min: 1, "aria-label": `${label} (minutes) for ${PRIORITY_SHORT[policy.priority]}` } }}
+            helperText={Number(n) >= 1 ? hoursLabel(Number(n)) : "At least 1 minute"}
+            error={!(Number(n) >= 1)}
+            sx={{ width: 140 }}
+          />
+        </TableCell>
+      ))}
+      <TableCell sx={cellSx} align="right">
+        <Button
+          size="small"
+          disabled={!dirty || !valid || save.isPending}
+          onClick={() =>
+            save.mutate({
+              path: `/sla-policies/${policy.priority}`,
+              method: "PATCH",
+              body: { response_minutes: r, resolution_minutes: s },
+              msg: `${PRIORITY_SHORT[policy.priority]} targets saved`,
+            })
+          }
+        >
+          Save
+        </Button>
+        {!valid && r > s ? (
+          <Typography variant="bodySmall" sx={{ display: "block", color: sys("error") }}>
+            First reply can't exceed resolution
+          </Typography>
+        ) : null}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function SlaTab({ notify }: { notify: (m: string) => void }) {
+  const policies = useQuery({ queryKey: ["sla-policies"], queryFn: () => api<SlaPolicy[]>("/sla-policies") });
+  return (
+    <Box sx={{ maxWidth: 760 }}>
+      <Alert severity="info" icon={false} sx={{ mb: 2, bgcolor: sys("secondaryContainer"), color: sys("onSecondaryContainer") }}>
+        These are the global defaults. Changes apply to tickets created after you save; existing tickets keep their
+        due dates unless their priority changes. An organisation with its own override (Organisations tab) uses that
+        instead.
+      </Alert>
+      <QueryState query={policies}>
+      <Table size="small" aria-label="SLA policies">
+        <TableHead>
+          <TableRow>
+            <TableCell>Priority</TableCell>
+            <TableCell>First reply within (minutes)</TableCell>
+            <TableCell>Resolve within (minutes)</TableCell>
+            <TableCell />
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {(policies.data ?? []).map((p) => (
+            <SlaRow key={p.id} policy={p} notify={notify} />
+          ))}
+        </TableBody>
+      </Table>
+      </QueryState>
+    </Box>
+  );
+}
+
+const ENTITY_LABEL: Record<string, string> = { user: "User", category: "Category", sla_policy: "SLA policy", organization: "Organisation" };
 
 const FIELD_LABEL: Record<string, string> = {
   role: "Role",
@@ -497,11 +721,22 @@ const FIELD_LABEL: Record<string, string> = {
   organization_id: "Organisation",
 };
 
-// Sign-in security events: a fixed sentence rather than a field diff.
+// Sign-in security events and organisation SLA overrides: a fixed sentence
+// rather than a field diff (the priority lives outside before/after).
 const ACTION_TEXT: Record<string, (d: AdminAudit["diff_json"]) => string> = {
   "user.2fa_enabled": () => "Turned on two-step verification",
   "user.2fa_reset": () => "Two-step verification reset",
   "user.recovery_code_used": (d) => `Signed in with a recovery code, ${(d as { remaining?: number } | null)?.remaining ?? 0} left`,
+  "organization.sla_override_set": (d) => {
+    const priority = (d as { priority?: TicketPriority } | null)?.priority;
+    const after = d?.after as { response_minutes?: number; resolution_minutes?: number } | undefined;
+    const label = priority ? PRIORITY_SHORT[priority] : "SLA";
+    return after ? `${label} override set to ${hoursLabel(after.response_minutes ?? 0)} reply / ${hoursLabel(after.resolution_minutes ?? 0)} resolve` : `${label} override set`;
+  },
+  "organization.sla_override_cleared": (d) => {
+    const priority = (d as { priority?: TicketPriority } | null)?.priority;
+    return `${priority ? PRIORITY_SHORT[priority] : "SLA"} override cleared, back to the global default`;
+  },
 };
 
 function show(value: unknown): string {
@@ -523,7 +758,8 @@ export function describeChange(a: Pick<AdminAudit, "diff_json"> & { action?: str
 }
 
 function subjectOf(a: AdminAudit): string {
-  return `${ENTITY_LABEL[a.entity_type] ?? a.entity_type}${a.subject ? ` ${a.subject}` : ""}`;
+  const name = a.entity_type === "sla_policy" && a.subject ? PRIORITY_SHORT[a.subject as TicketPriority] : a.subject;
+  return `${ENTITY_LABEL[a.entity_type] ?? a.entity_type}${name ? ` ${name}` : ""}`;
 }
 
 function ChangesTab() {
@@ -576,12 +812,14 @@ export function AdminPage() {
         <Tab value="users" label="Users" />
         <Tab value="organizations" label="Organisations" />
         <Tab value="categories" label="Categories" />
+        <Tab value="sla" label="SLA policies" />
         <Tab value="changes" label="Change log" />
       </Tabs>
       <Stack>
         {tab === "users" ? <UsersTab notify={setToast} /> : null}
         {tab === "organizations" ? <OrganizationsTab notify={setToast} /> : null}
         {tab === "categories" ? <CategoriesTab notify={setToast} /> : null}
+        {tab === "sla" ? <SlaTab notify={setToast} /> : null}
         {tab === "changes" ? <ChangesTab /> : null}
       </Stack>
       <Snackbar open={toast !== null} autoHideDuration={4000} onClose={() => setToast(null)} message={toast} />

@@ -3,7 +3,8 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../../../api/client";
 import type { TicketStatus } from "../../../api/types";
-import { formatDuration, STATUS_LABEL } from "../../../lib/tickets";
+import { formatDuration } from "../../../lib/sla";
+import { STATUS_LABEL } from "../../../lib/tickets";
 import { sys } from "../../../theme/scheme";
 import { typescale } from "../../../theme/tokens";
 import { BarChart, ColumnChart } from "./charts";
@@ -16,13 +17,14 @@ type Summary = {
   first_response: { median_seconds: number | null; avg_seconds: number | null; count: number };
   resolution: { median_seconds: number | null; avg_seconds: number | null; count: number };
   backlog: { status: TicketStatus; count: number }[];
+  sla_breaches: { total: number; response: number; resolution: number };
   backlog_by_organization: { name: string; count: number }[];
 };
 
 const RANGES = [7, 30, 90] as const;
 
 const day = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en", { month: "short", day: "numeric", timeZone: "UTC" });
-// Seconds matter here: a 40s first reply is a meaningfully different result from a 4-minute one.
+// Seconds matter here (a 40s first reply is a real result), unlike on SLA countdowns.
 const duration = (s: number | null) =>
   s === null ? "None yet" : s < 60 ? `${Math.round(s)}s` : formatDuration(s * 1000);
 
@@ -125,7 +127,12 @@ export function DashboardPage() {
             <StatTile
               label="Median resolution"
               value={duration(s.resolution.median_seconds)}
-              detail={s.resolution.count ? `Average ${duration(s.resolution.avg_seconds)} across ${s.resolution.count} tickets` : "Nothing resolved in this range"}
+              detail={s.resolution.count ? `Average ${duration(s.resolution.avg_seconds)}, paused time excluded` : "Nothing resolved in this range"}
+            />
+            <StatTile
+              label="SLA breaches"
+              value={s.sla_breaches.total.toLocaleString()}
+              detail={`${s.sla_breaches.response} first-reply, ${s.sla_breaches.resolution} resolution`}
             />
           </Box>
 

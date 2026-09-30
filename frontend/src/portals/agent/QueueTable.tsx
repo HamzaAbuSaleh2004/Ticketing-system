@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import type { TicketQueueItem } from "../../api/types";
 import { PriorityChip, StatusChip } from "../../components/TicketChips";
+import { SlaIndicator } from "../../components/SlaIndicator";
 import { absoluteTime, compactAgo, relativeTime, ticketRef, waitingOnText } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
 
@@ -13,6 +14,8 @@ const COLUMNS: { key: string; label: string; width?: number; align?: "right" }[]
   { key: "requester", label: "Opened by", width: 150 },
   { key: "priority", label: "Priority", width: 92 },
   { key: "status", label: "Status", width: 112 },
+  // Wide enough for "22h 04m over" + "Breached" without truncation.
+  { key: "sla", label: "SLA", width: 196 },
   { key: "assignee", label: "Assignee", width: 140 },
   { key: "waiting_on", label: "Waiting on", width: 140 },
   { key: "updated", label: "Updated", width: 80, align: "right" },
@@ -120,6 +123,9 @@ export function QueueTable({
                 </TableCell>
                 <TableCell sx={cell}>
                   <StatusChip status={t.status} />
+                </TableCell>
+                <TableCell sx={cell}>
+                  <SlaIndicator ticket={t} />
                 </TableCell>
                 <TableCell
                   sx={{ ...cell, color: t.assignee_name ? sys("onSurface") : sys("onSurfaceVariant") }}

@@ -13,7 +13,9 @@ from app.models import (
     KnowledgeBaseArticle,
     Organization,
     OrganizationKind,
+    SlaPolicy,
     Team,
+    TicketPriority,
     User,
     UserRole,
 )
@@ -47,6 +49,13 @@ ORGANIZATIONS = [
     {"name": "Ministry of Public Works", "kind": OrganizationKind.government},
     {"name": "Harborline Logistics", "kind": OrganizationKind.company},
     {"name": "City Transit Authority", "kind": OrganizationKind.government},
+]
+
+SLA_POLICIES = [
+    {"name": "Urgent", "priority": TicketPriority.urgent, "response_minutes": 15, "resolution_minutes": 4 * 60},
+    {"name": "High", "priority": TicketPriority.high, "response_minutes": 60, "resolution_minutes": 8 * 60},
+    {"name": "Normal", "priority": TicketPriority.normal, "response_minutes": 4 * 60, "resolution_minutes": 24 * 60},
+    {"name": "Low", "priority": TicketPriority.low, "response_minutes": 8 * 60, "resolution_minutes": 72 * 60},
 ]
 
 CATEGORIES = [
@@ -182,6 +191,37 @@ async def seed_users(session: AsyncSession) -> None:
     await session.commit()
 
 
+async def seed_sla_policies(session: AsyncSession) -> None:
+    for p in SLA_POLICIES:
+        existing = await session.scalar(
+            select(SlaPolicy).where(SlaPolicy.organization_id.is_(None), SlaPolicy.priority == p["priority"])
+        )
+        if existing:
+            continue
+        session.add(SlaPolicy(organization_id=None, **p))
+    await session.commit()
+
+    # One demo override, so the per-organisation SLA feature is actually
+    # exercised by the seed data: Public Works gets a longer Low-priority
+    # resolution window than the global default (5 days vs 3).
+    org = await session.scalar(select(Organization).where(Organization.name == "Ministry of Public Works"))
+    if org is not None:
+        existing_override = await session.scalar(
+            select(SlaPolicy).where(SlaPolicy.organization_id == org.id, SlaPolicy.priority == TicketPriority.low)
+        )
+        if existing_override is None:
+            session.add(
+                SlaPolicy(
+                    organization_id=org.id,
+                    name="Ministry of Public Works — Low",
+                    priority=TicketPriority.low,
+                    response_minutes=8 * 60,
+                    resolution_minutes=5 * 24 * 60,
+                )
+            )
+            await session.commit()
+
+
 async def seed_categories(session: AsyncSession) -> None:
     for c in CATEGORIES:
         existing = await session.scalar(select(Category).where(Category.slug == c["slug"]))
@@ -203,6 +243,7 @@ async def main() -> None:
     async with SessionLocal() as session:
         await seed_organizations(session)
         await seed_users(session)
+        await seed_sla_policies(session)
         await seed_categories(session)
         await seed_kb_articles(session)
         settings = get_settings()

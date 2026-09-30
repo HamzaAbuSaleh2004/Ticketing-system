@@ -87,19 +87,6 @@ export function compactAgo(iso: string, now: Date = new Date()): string {
 export const absoluteTime = (iso: string) =>
   new Date(iso).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
 
-const MIN = 60_000;
-const HOUR = 60 * MIN;
-const DAY = 24 * HOUR;
-
-/** "3d 4h", "2h 05m", "12m", "<1m" — a duration, not a point in time. */
-export function formatDuration(ms: number): string {
-  const abs = Math.abs(ms);
-  if (abs >= DAY) return `${Math.floor(abs / DAY)}d ${Math.floor((abs % DAY) / HOUR)}h`;
-  if (abs >= HOUR) return `${Math.floor(abs / HOUR)}h ${String(Math.floor((abs % HOUR) / MIN)).padStart(2, "0")}m`;
-  if (abs >= MIN) return `${Math.floor(abs / MIN)}m`;
-  return "<1m";
-}
-
 /** "Customer 2", "LiverX 1", "Customer 1, LiverX 2", or null when nothing's
  * open on either side — as text, not colour alone, per the brief's queue rule. */
 export function waitingOnText(openCustomerItems: number, openLiverxItems: number): string | null {

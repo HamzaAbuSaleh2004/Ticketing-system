@@ -5,7 +5,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.lifecycle import escalate_priority
-from app.models import Team, Ticket, TicketCollaborator, User
+from app.domain.sla import recompute_due_on_priority_change
+from app.models import SlaPolicy, Team, Ticket, TicketCollaborator, User
 from app.models.enums import TicketPriority, TicketStatus, UserRole
 
 ACTIVE_STATUSES = [
@@ -27,8 +28,36 @@ async def lock_ticket(session: AsyncSession, ticket_id: int) -> Ticket | None:
     )
 
 
-def set_priority(ticket: Ticket, priority: TicketPriority) -> None:
+async def get_policy(session: AsyncSession, priority: TicketPriority, organization_id: int | None) -> SlaPolicy:
+    """The organisation's own override for this priority, if it has one,
+    else the global default (organization_id IS NULL)."""
+    if organization_id is not None:
+        org_policy = await session.scalar(
+            select(SlaPolicy).where(
+                SlaPolicy.organization_id == organization_id, SlaPolicy.priority == priority
+            )
+        )
+        if org_policy is not None:
+            return org_policy
+    policy = await session.scalar(
+        select(SlaPolicy).where(SlaPolicy.organization_id.is_(None), SlaPolicy.priority == priority)
+    )
+    if policy is None:
+        raise RuntimeError(f"No default SLA policy configured for priority {priority.value}")
+    return policy
+
+
+async def set_priority(session: AsyncSession, ticket: Ticket, priority: TicketPriority) -> None:
     ticket.priority = priority
+    policy = await get_policy(session, priority, ticket.organization_id)
+    ticket.sla_response_due, ticket.sla_resolution_due = recompute_due_on_priority_change(
+        created_at=ticket.created_at,
+        response_minutes=policy.response_minutes,
+        resolution_minutes=policy.resolution_minutes,
+        first_responded_at=ticket.first_responded_at,
+        paused_total_seconds=ticket.sla_paused_total_seconds,
+        current_response_due=ticket.sla_response_due,
+    )
 
 
 async def drop_as_collaborator(session: AsyncSession, ticket_id: int, user_id: int) -> None:
@@ -68,7 +97,7 @@ async def escalate(session: AsyncSession, ticket: Ticket) -> tuple[dict, dict]:
         "escalated": ticket.escalated,
         "assignee_id": ticket.assignee_id,
     }
-    set_priority(ticket, escalate_priority(ticket.priority))
+    await set_priority(session, ticket, escalate_priority(ticket.priority))
     ticket.escalated = True
     senior_id = await least_loaded_senior(session)
     if senior_id is not None:

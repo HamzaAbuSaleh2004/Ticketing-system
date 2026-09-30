@@ -1,13 +1,25 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest_asyncio
 from sqlalchemy import func, select
 
 from app.domain import clock
-from app.models import AuditLog, User
-from app.models.enums import Team
-from tests.helpers import create_agent, login, register_full
+from app.models import AuditLog, Organization, SlaPolicy, User
+from app.models.enums import OrganizationKind, Team, TicketPriority, UserRole
+from app.seed import SLA_POLICIES
+from tests.helpers import create_agent, create_user, login, register_full
 
 BASE = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
+
+
+# Ticket creation looks up an sla_policies row by priority; the test DB is
+# migrated but never seeded (that's app/seed.py's job for the dev stack), so
+# these tests need their own minimal policy set.
+@pytest_asyncio.fixture(autouse=True)
+async def _sla_policies(db_session):
+    for p in SLA_POLICIES:
+        db_session.add(SlaPolicy(organization_id=None, **p))
+    await db_session.commit()
 
 
 def _freeze(monkeypatch, when: datetime) -> None:
@@ -40,7 +52,7 @@ async def _audit_count(db_session, ticket_id: int) -> int:
     return result or 0
 
 
-async def test_full_lifecycle_walk_and_follow_up(client, db_session, monkeypatch):
+async def test_full_lifecycle_walk_sla_pause_and_follow_up(client, db_session, monkeypatch):
     _freeze(monkeypatch, BASE)
 
     customer_token, _ = await _register(client, "customer@example.com")
@@ -57,6 +69,7 @@ async def test_full_lifecycle_walk_and_follow_up(client, db_session, monkeypatch
     ticket_id = ticket["id"]
     assert ticket["status"] == "open"
     assert ticket["priority"] == "normal"
+    original_resolution_due = datetime.fromisoformat(ticket["sla_resolution_due"])
 
     audit_count = await _audit_count(db_session, ticket_id)
     assert audit_count == 1  # ticket.created
@@ -90,19 +103,24 @@ async def test_full_lifecycle_walk_and_follow_up(client, db_session, monkeypatch
     detail = (await client.get(f"/tickets/{ticket_id}", headers=_auth(agent_token))).json()
     assert detail["first_responded_at"] is not None
 
-    # in_progress -> pending
+    # in_progress -> pending pauses the resolution SLA
     resp = await client.patch(f"/tickets/{ticket_id}", json={"status": "pending"}, headers=_auth(agent_token))
     assert resp.status_code == 200
     audit_count += 1
     assert await _audit_count(db_session, ticket_id) == audit_count
+    assert resp.json()["sla_paused_at"] is not None
 
-    # 2 hours later, pending -> in_progress
+    # 2 hours later, pending -> in_progress: resolution due shifts by exactly the pause duration
     resumed_at = BASE + timedelta(hours=2)
     _freeze(monkeypatch, resumed_at)
     resp = await client.patch(f"/tickets/{ticket_id}", json={"status": "in_progress"}, headers=_auth(agent_token))
     assert resp.status_code == 200
     audit_count += 1
     assert await _audit_count(db_session, ticket_id) == audit_count
+    detail = resp.json()
+    assert detail["sla_paused_at"] is None
+    assert datetime.fromisoformat(detail["sla_resolution_due"]) == original_resolution_due + timedelta(hours=2)
+    assert detail["sla_paused_total_seconds"] == int(timedelta(hours=2).total_seconds())
 
     # in_progress -> resolved
     resp = await client.patch(f"/tickets/{ticket_id}", json={"status": "resolved"}, headers=_auth(agent_token))
@@ -164,6 +182,50 @@ async def test_full_lifecycle_walk_and_follow_up(client, db_session, monkeypatch
     assert follow_up["description"] == "New, unrelated problem"
 
 
+async def test_organization_sla_override_applies_to_new_tickets_only(client, db_session, monkeypatch):
+    _freeze(monkeypatch, BASE)
+    org = Organization(name="Override Org", kind=OrganizationKind.company, active=True)
+    db_session.add(org)
+    await db_session.commit()
+    await db_session.refresh(org)
+
+    await create_user(db_session, email="org-customer@example.com", role=UserRole.end_user, organization_id=org.id)
+    customer_token = await login(client, "org-customer@example.com")
+
+    # No override yet: falls back to the global default (normal: 24h resolution).
+    before = (
+        await client.post("/tickets", json={"subject": "s", "description": "d"}, headers=_auth(customer_token))
+    ).json()
+    assert datetime.fromisoformat(before["sla_resolution_due"]) == BASE + timedelta(hours=24)
+
+    # This organisation's own override for normal priority: 6h instead of 24h.
+    db_session.add(
+        SlaPolicy(
+            organization_id=org.id, name="Override Org - normal", priority=TicketPriority.normal,
+            response_minutes=4 * 60, resolution_minutes=6 * 60,
+        )
+    )
+    await db_session.commit()
+
+    # A new ticket picks up the override...
+    after = (
+        await client.post("/tickets", json={"subject": "s2", "description": "d2"}, headers=_auth(customer_token))
+    ).json()
+    assert datetime.fromisoformat(after["sla_resolution_due"]) == BASE + timedelta(hours=6)
+
+    # ...but the earlier ticket's due date is untouched.
+    unchanged = (await client.get(f"/tickets/{before['id']}", headers=_auth(customer_token))).json()
+    assert datetime.fromisoformat(unchanged["sla_resolution_due"]) == BASE + timedelta(hours=24)
+
+    # A customer with no organisation still gets the global default.
+    await create_user(db_session, email="no-org-customer@example.com", role=UserRole.end_user)
+    no_org_token = await login(client, "no-org-customer@example.com")
+    no_org = (
+        await client.post("/tickets", json={"subject": "s3", "description": "d3"}, headers=_auth(no_org_token))
+    ).json()
+    assert datetime.fromisoformat(no_org["sla_resolution_due"]) == BASE + timedelta(hours=24)
+
+
 async def test_end_user_gets_404_on_another_users_ticket(client, db_session):
     owner_token, _ = await _register(client, "owner@example.com")
     other_token, _ = await _register(client, "other@example.com")
@@ -210,7 +272,7 @@ async def test_end_user_never_receives_internal_notes(client, db_session):
 
     as_customer = (await client.get(f"/tickets/{ticket_id}", headers=_auth(customer_token))).json()
     assert as_customer["comments"] == []
-    for agent_only in ("audit_log", "allowed_transitions"):
+    for agent_only in ("audit_log", "sla_paused_total_seconds", "allowed_transitions"):
         assert agent_only not in as_customer
 
     as_agent = (await client.get(f"/tickets/{ticket_id}", headers=_auth(agent_token))).json()
@@ -312,7 +374,7 @@ async def test_customers_see_staff_first_names_and_reopen_window(client, db_sess
     assert datetime.fromisoformat(resolved["reopen_until"]) == BASE + timedelta(hours=72)
 
 
-async def test_agent_queue_rows_carry_names_end_users_dont(client, db_session, monkeypatch):
+async def test_agent_queue_rows_carry_names_and_clock_inputs_end_users_dont(client, db_session, monkeypatch):
     _freeze(monkeypatch, BASE)
     customer_token, _ = await _register(client, "queue-customer@example.com", name="Quinn Customer")
     agent = await _create_agent(db_session, email="queue-agent@example.com")
@@ -328,9 +390,10 @@ async def test_agent_queue_rows_carry_names_end_users_dont(client, db_session, m
     assert set(rows) == {first, second}
     assert rows[first]["requester_name"] == "Quinn Customer"
     assert rows[first]["assignee_name"] == "Agent"
+    assert rows[first]["sla_paused_total_seconds"] == 0
 
     mine = (await client.get("/tickets", headers=_auth(customer_token))).json()["items"]
-    assert {"requester_name", "assignee_name"}.isdisjoint(mine[0])
+    assert {"requester_name", "assignee_name", "sla_paused_total_seconds"}.isdisjoint(mine[0])
 
     detail = (await client.get(f"/tickets/{first}", headers=_auth(agent_token))).json()
     assert (detail["requester_name"], detail["requester_email"], detail["assignee_name"]) == (

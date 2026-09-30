@@ -19,6 +19,7 @@ from app.domain.lifecycle import (
     customer_reply_outcome,
     validate_transition,
 )
+from app.domain.sla import compute_due_dates, enter_pending, leave_pending
 from app.models import (
     Attachment,
     AuditLog,
@@ -51,7 +52,7 @@ from app.schemas.ticket import (
     TicketQueueItem,
     TicketQueueResponse,
 )
-from app.services.tickets import drop_as_collaborator, escalate, lock_ticket, set_priority
+from app.services.tickets import drop_as_collaborator, escalate, get_policy, lock_ticket, set_priority
 from app.storage import Storage, get_storage
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
@@ -92,6 +93,7 @@ _SORTABLE_COLUMNS: dict[str, ColumnElement] = {
     "updated_at": Ticket.updated_at,
     "priority": Ticket.priority,
     "status": Ticket.status,
+    "sla_resolution_due": Ticket.sla_resolution_due,
 }
 
 _AGENT_ROLES = (UserRole.agent, UserRole.admin)
@@ -202,6 +204,7 @@ async def _build_ticket_detail(
     collaborators = await _collaborators_out(session, ticket.id)
     return TicketDetail(
         **public.model_dump(),
+        sla_paused_total_seconds=ticket.sla_paused_total_seconds,
         requester_name=requester.name if requester else None,
         requester_email=requester.email if requester else None,
         assignee_name=assignee.name if assignee else None,
@@ -283,6 +286,11 @@ async def create_ticket(
         requester_id = user.id
         organization_id = user.organization_id
 
+    policy = await get_policy(session, TicketPriority.normal, organization_id)
+    response_due, resolution_due = compute_due_dates(
+        now, response_minutes=policy.response_minutes, resolution_minutes=policy.resolution_minutes
+    )
+
     ticket = Ticket(
         subject=body.subject,
         description=body.description,
@@ -290,6 +298,8 @@ async def create_ticket(
         priority=TicketPriority.normal,
         requester_id=requester_id,
         organization_id=organization_id,
+        sla_response_due=response_due,
+        sla_resolution_due=resolution_due,
         created_at=now,
     )
     session.add(ticket)
@@ -445,7 +455,9 @@ async def list_tickets(
                 **_item(t, org_name, org_kind, oc, ol).model_dump(),
                 requester_name=requester_name,
                 assignee_name=assignee_name,
+                sla_paused_at=t.sla_paused_at,
                 first_responded_at=t.first_responded_at,
+                sla_paused_total_seconds=t.sla_paused_total_seconds,
                 collaborators=collab_map.get(t.id, []),
             )
             for t, requester_name, assignee_name, org_name, org_kind, oc, ol in rows
@@ -497,7 +509,7 @@ async def patch_ticket(
 
     if changes.get("priority") is not None and changes["priority"] != ticket.priority:
         before["priority"] = ticket.priority.value
-        set_priority(ticket, changes["priority"])
+        await set_priority(session, ticket, changes["priority"])
         after["priority"] = ticket.priority.value
 
     if "category" in changes and changes["category"] != ticket.category:
@@ -556,6 +568,17 @@ async def patch_ticket(
 
         before["status"] = ticket.status.value
 
+        if target is TicketStatus.pending:
+            ticket.sla_paused_at = enter_pending(now)
+        elif ticket.status is TicketStatus.pending and target is TicketStatus.in_progress:
+            ticket.sla_resolution_due, ticket.sla_paused_total_seconds = leave_pending(
+                resolution_due=ticket.sla_resolution_due,
+                paused_at=ticket.sla_paused_at,
+                paused_total_seconds=ticket.sla_paused_total_seconds,
+                now=now,
+            )
+            ticket.sla_paused_at = None
+
         if target is TicketStatus.resolved:
             ticket.resolved_at = now
         elif ticket.status is TicketStatus.resolved and target is TicketStatus.in_progress:
@@ -610,13 +633,23 @@ async def create_comment(
         )
 
         if outcome == "follow_up":
+            # Inherits the parent ticket's organisation, exactly like a live
+            # POST /tickets — so its SLA policy (and backlog-by-organisation
+            # reporting) resolve the same way the parent's did.
+            policy = await get_policy(session, TicketPriority.normal, ticket.organization_id)
+            response_due, resolution_due = compute_due_dates(
+                now, response_minutes=policy.response_minutes, resolution_minutes=policy.resolution_minutes
+            )
             follow_up = Ticket(
                 subject=ticket.subject,
                 description=body.body,
                 status=TicketStatus.open,
                 priority=TicketPriority.normal,
                 requester_id=user.id,
+                organization_id=ticket.organization_id,
                 parent_ticket_id=ticket.id,
+                sla_response_due=response_due,
+                sla_resolution_due=resolution_due,
                 created_at=now,
             )
             session.add(follow_up)
@@ -637,6 +670,14 @@ async def create_comment(
             before_status = ticket.status
             if ticket.status is TicketStatus.resolved:
                 ticket.resolved_at = None
+            if ticket.status is TicketStatus.pending:
+                ticket.sla_resolution_due, ticket.sla_paused_total_seconds = leave_pending(
+                    resolution_due=ticket.sla_resolution_due,
+                    paused_at=ticket.sla_paused_at,
+                    paused_total_seconds=ticket.sla_paused_total_seconds,
+                    now=now,
+                )
+                ticket.sla_paused_at = None
             ticket.status = TicketStatus.in_progress
             await write_audit(
                 session,

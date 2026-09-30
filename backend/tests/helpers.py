@@ -4,15 +4,17 @@ import pyotp
 
 from app.auth.security import hash_password
 from app.domain import clock
-from app.models import Category, User
+from app.models import Category, SlaPolicy, User
 from app.models.enums import Team, UserRole
-from app.seed import CATEGORIES
+from app.seed import CATEGORIES, SLA_POLICIES
 
 # Accounts made directly in the DB (create_agent) have 2FA set up on this.
 TEST_TOTP_SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
 
 
 async def seed_reference_data(db_session) -> None:
+    for p in SLA_POLICIES:
+        db_session.add(SlaPolicy(organization_id=None, **p))
     for c in CATEGORIES:
         db_session.add(Category(name=c["name"], slug=c["slug"], active=True))
     await db_session.commit()

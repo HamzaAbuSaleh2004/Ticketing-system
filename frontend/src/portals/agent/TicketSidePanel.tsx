@@ -10,13 +10,28 @@ import {
   useStaff,
 } from "../../api/hooks";
 import type { TicketDetail, TicketPatch, TicketPriority } from "../../api/types";
+import { SlaIndicator } from "../../components/SlaIndicator";
 import { statusHint, statusOptions } from "../../lib/lifecycle";
-import { PRIORITY_LABEL, STATUS_LABEL } from "../../lib/tickets";
+import { PRIORITY_LABEL, STATUS_LABEL, absoluteTime } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
 import { ActionItemsSection } from "./ActionItemsSection";
 import { AuditTrail } from "./AuditTrail";
 
 const PRIORITIES: TicketPriority[] = ["urgent", "high", "normal", "low"];
+
+function Due({ label, at, done }: { label: string; at: string | null; done: string | null }) {
+  if (!at && !done) return null;
+  return (
+    <Stack direction="row" sx={{ justifyContent: "space-between", gap: 1 }}>
+      <Typography variant="bodySmall" sx={{ color: sys("onSurfaceVariant") }}>
+        {label}
+      </Typography>
+      <Typography variant="bodySmall" className="tabular">
+        {done ?? (at ? absoluteTime(at) : "")}
+      </Typography>
+    </Stack>
+  );
+}
 
 export function TicketSidePanel({
   ticket,
@@ -47,6 +62,19 @@ export function TicketSidePanel({
 
   return (
     <Stack spacing={2}>
+      <Box>
+        <SlaIndicator ticket={ticket} size="large" />
+        <Stack spacing={0.25} sx={{ mt: 1.5 }}>
+          <Due label="First reply due" at={ticket.sla_response_due} done={ticket.first_responded_at ? `Replied ${absoluteTime(ticket.first_responded_at)}` : null} />
+          <Due label="Resolve by" at={ticket.sla_resolution_due} done={null} />
+          {ticket.sla_paused_total_seconds > 0 ? (
+            <Due label="Paused so far" at={null} done={`${Math.round(ticket.sla_paused_total_seconds / 60)} min`} />
+          ) : null}
+        </Stack>
+      </Box>
+
+      <Divider />
+
       <Stack spacing={1.5}>
         <TextField
           select

@@ -1,4 +1,16 @@
+import pytest_asyncio
+
+from app.models import SlaPolicy
+from app.models.enums import TicketPriority
 from tests.helpers import create_agent, login, register
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _sla_policy(db_session):
+    db_session.add(
+        SlaPolicy(organization_id=None, name="Normal", priority=TicketPriority.normal, response_minutes=240, resolution_minutes=1440)
+    )
+    await db_session.commit()
 
 
 def _auth(token: str) -> dict:
