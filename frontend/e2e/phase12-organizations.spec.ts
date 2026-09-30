@@ -19,9 +19,14 @@ test("a ticket carries its organisation and requester, and the two action-item l
   const stamp = Date.now() % 1_000_000;
   const email = `org-e2e-${stamp}@example.com`;
   const name = `Orin Customer ${stamp}`;
-  const reg = await (await admin.ctx.post("/auth/register", { data: { email, password: "Password123!", name } })).json();
-  const setup = await (await admin.ctx.post("/auth/2fa/setup", { data: { mfa_token: reg.mfa_token } })).json();
-  const enabled = await admin.ctx.post("/auth/2fa/enable", { data: { mfa_token: reg.mfa_token, code: await nextCode(email, setup.secret) } });
+  const password = "Password123!";
+  // Phase 23: self-registration is closed by default — an admin provisions
+  // the account; its first login still returns an "enrol" challenge, same
+  // shape as a self-registered account used to.
+  await admin.post("/users", { email, name, role: "end_user", password });
+  const login = await (await admin.ctx.post("/auth/login", { data: { email, password } })).json();
+  const setup = await (await admin.ctx.post("/auth/2fa/setup", { data: { mfa_token: login.mfa_token } })).json();
+  const enabled = await admin.ctx.post("/auth/2fa/enable", { data: { mfa_token: login.mfa_token, code: await nextCode(email, setup.secret) } });
   expect(enabled.ok()).toBeTruthy();
   const { user } = await enabled.json();
   await admin.patch(`/users/${user.id}`, { organization_id: org.id });
@@ -112,8 +117,7 @@ test("admin adds, renames, re-kinds and deactivates an organisation, and assigns
   // doesn't need to remember and restore someone else's original organisation.
   const email = `admin-org-e2e-${stamp}@example.com`;
   const who = `Uma Throwaway ${stamp}`;
-  const reg = await (await admin.ctx.post("/auth/register", { data: { email, password: "Password123!", name: who } })).json();
-  await admin.ctx.post("/auth/2fa/setup", { data: { mfa_token: reg.mfa_token } });
+  await admin.post("/users", { email, name: who, role: "end_user", password: "Password123!" });
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await signIn(page, "admin@ticketing.demo");

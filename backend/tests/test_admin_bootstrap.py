@@ -279,14 +279,25 @@ async def test_create_staff_rejects_a_non_staff_domain(client, db_session):
     assert resp.status_code == 422
 
 
-async def test_create_staff_rejects_end_user_role_and_duplicate_email(client, db_session):
+async def test_create_account_allows_end_user_role_and_rejects_duplicate_email(client, db_session):
     admin_token = await _admin_token(client, db_session)
-    bad_role = await client.post(
+    customer = await client.post(
         "/users",
-        json={"email": "customer@liverx.me", "name": "Nope", "role": "end_user", "password": "Password123!"},
+        json={"email": "customer@example.com", "name": "Cam Customer", "role": "end_user", "password": "Password123!"},
         headers=auth(admin_token),
     )
-    assert bad_role.status_code == 422
+    assert customer.status_code == 201, customer.text
+    assert customer.json()["organization_id"] is None
+
+    bad_org = await client.post(
+        "/users",
+        json={
+            "email": "customer2@example.com", "name": "Nope", "role": "end_user",
+            "organization_id": 999999, "password": "Password123!",
+        },
+        headers=auth(admin_token),
+    )
+    assert bad_org.status_code == 422
 
     first = await client.post(
         "/users",

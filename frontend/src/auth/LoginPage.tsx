@@ -12,8 +12,9 @@ import { TwoStep } from "./TwoStep";
 export function LoginPage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
-  // Defaults to shown while loading, so it doesn't flash in then disappear.
-  const allowRegistration = useAuthConfig().data?.allow_registration ?? true;
+  // Defaults to hidden while loading (Phase 23: closed is the common case
+  // now), so it doesn't flash in then disappear.
+  const allowRegistration = useAuthConfig().data?.allow_registration ?? false;
   const from = (useLocation().state as { from?: string } | null)?.from;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

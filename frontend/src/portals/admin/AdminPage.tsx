@@ -65,12 +65,14 @@ function useSave(onDone: (msg: string) => void, keys: (string | number)[][]) {
   });
 }
 
-function AddStaffDialog({ open, onClose, notify }: { open: boolean; onClose: () => void; notify: (m: string) => void }) {
+function AddAccountDialog({ open, onClose, notify }: { open: boolean; onClose: () => void; notify: (m: string) => void }) {
   const save = useSave(notify, [["admin", "users"], ["staff"]]);
+  const organizations = useOrganizations();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [role, setRole] = useState<"agent" | "admin">("agent");
+  const [role, setRole] = useState<Role>("agent");
   const [team, setTeam] = useState<Team>("tier1");
+  const [organizationId, setOrganizationId] = useState<number | "">("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -83,6 +85,7 @@ function AddStaffDialog({ open, onClose, notify }: { open: boolean; onClose: () 
     setName("");
     setRole("agent");
     setTeam("tier1");
+    setOrganizationId("");
     setPassword("");
     setConfirm("");
     setSubmitted(false);
@@ -96,7 +99,14 @@ function AddStaffDialog({ open, onClose, notify }: { open: boolean; onClose: () 
       {
         path: "/users",
         method: "POST",
-        body: { email: email.trim(), name: name.trim(), role, team: role === "agent" ? team : undefined, password },
+        body: {
+          email: email.trim(),
+          name: name.trim(),
+          role,
+          team: role === "agent" ? team : undefined,
+          organization_id: role === "end_user" && organizationId !== "" ? organizationId : undefined,
+          password,
+        },
         msg: `${name.trim()} added as ${ROLE_LABEL[role].toLowerCase()}`,
       },
       { onSuccess: () => { reset(); onClose(); } },
@@ -104,9 +114,9 @@ function AddStaffDialog({ open, onClose, notify }: { open: boolean; onClose: () 
   }
 
   return (
-    <Dialog open={open} onClose={() => { reset(); onClose(); }} aria-labelledby="add-staff-title">
+    <Dialog open={open} onClose={() => { reset(); onClose(); }} aria-labelledby="add-account-title">
       <Box component="form" onSubmit={submit} noValidate>
-        <DialogTitle id="add-staff-title">Add admin or agent</DialogTitle>
+        <DialogTitle id="add-account-title">Add account</DialogTitle>
         <DialogContent>
           <Stack spacing={2.5} sx={{ mt: 0.5, minWidth: 320 }}>
             <TextField
@@ -116,9 +126,15 @@ function AddStaffDialog({ open, onClose, notify }: { open: boolean; onClose: () 
             <TextField
               label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required fullWidth
               error={submitted && !email.trim()}
-              helperText={submitted && !email.trim() ? "Enter their work email" : "Must be on an allowed staff domain"}
+              helperText={
+                submitted && !email.trim() ? "Enter their email" : role === "end_user" ? undefined : "Must be on an allowed staff domain"
+              }
             />
-            <TextField select label="Role" value={role} onChange={(e) => setRole(e.target.value as "agent" | "admin")} fullWidth>
+            <TextField
+              select label="Role" value={role} fullWidth
+              onChange={(e) => { setRole(e.target.value as Role); setOrganizationId(""); }}
+            >
+              <MenuItem value="end_user">Customer</MenuItem>
               <MenuItem value="agent">Agent</MenuItem>
               <MenuItem value="admin">Admin</MenuItem>
             </TextField>
@@ -129,6 +145,25 @@ function AddStaffDialog({ open, onClose, notify }: { open: boolean; onClose: () 
                     {TEAM_LABEL[t]}
                   </MenuItem>
                 ))}
+              </TextField>
+            ) : null}
+            {role === "end_user" ? (
+              <TextField
+                select
+                label="Organisation"
+                value={organizationId}
+                onChange={(e) => setOrganizationId(e.target.value === "" ? "" : Number(e.target.value))}
+                fullWidth
+                helperText="Optional — can be set later"
+              >
+                <MenuItem value="">None yet</MenuItem>
+                {(organizations.data ?? [])
+                  .filter((o) => o.active)
+                  .map((o) => (
+                    <MenuItem key={o.id} value={o.id}>
+                      {o.name}
+                    </MenuItem>
+                  ))}
               </TextField>
             ) : null}
             <TextField
@@ -162,13 +197,13 @@ function UsersTab({ notify }: { notify: (m: string) => void }) {
   const save = useSave(notify, [["admin", "users"], ["staff"]]);
   const patch = (u: User, body: Partial<AdminUser>, msg: string) => save.mutate({ path: `/users/${u.id}`, method: "PATCH", body, msg });
   const [resetting, setResetting] = useState<AdminUser | null>(null);
-  const [addingStaff, setAddingStaff] = useState(false);
+  const [addingAccount, setAddingAccount] = useState(false);
 
   return (
     <QueryState query={users}>
     <Box sx={{ mb: 1.5 }}>
-      <Button size="small" onClick={() => setAddingStaff(true)}>
-        Add admin or agent
+      <Button size="small" onClick={() => setAddingAccount(true)}>
+        Add account
       </Button>
     </Box>
     <Table size="small" aria-label="Users">
@@ -310,7 +345,7 @@ function UsersTab({ notify }: { notify: (m: string) => void }) {
         </Button>
       </DialogActions>
     </Dialog>
-    <AddStaffDialog open={addingStaff} onClose={() => setAddingStaff(false)} notify={notify} />
+    <AddAccountDialog open={addingAccount} onClose={() => setAddingAccount(false)} notify={notify} />
     </QueryState>
   );
 }

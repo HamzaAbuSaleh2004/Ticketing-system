@@ -50,23 +50,25 @@ class UserPatch(BaseModel):
 class StaffCreate(BaseModel):
     """Phase 14: a way to add a new admin/agent directly, so the first real
     admin can hand off to a second one without that person first
-    registering a customer account to be promoted."""
+    registering a customer account to be promoted. Phase 23: also the only
+    way to create a customer account, now that self-registration is closed
+    by default - `organization_id` is meaningful (and optional) only then."""
 
     email: EmailStr
     name: str = Field(min_length=1, max_length=255)
     role: UserRole
     team: Team | None = None
+    organization_id: int | None = None
     password: str = Field(min_length=8)
 
     _email = field_validator("email")(normalize_email)
     _password = field_validator("password")(check_password_bytes)
 
-    @field_validator("role")
-    @classmethod
-    def _staff_role_only(cls, value: UserRole) -> UserRole:
-        if value not in (UserRole.agent, UserRole.admin):
-            raise ValueError("role must be agent or admin")
-        return value
+
+async def _require_active_organization(session: AsyncSession, organization_id: int) -> None:
+    org = await session.get(Organization, organization_id)
+    if org is None or not org.active:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown or inactive organisation")
 
 
 def _clean_name(value: str | None) -> str | None:
@@ -151,31 +153,49 @@ async def list_users(user: User = Depends(_admin), session: AsyncSession = Depen
 
 
 @router.post("/users", response_model=AdminUserOut, status_code=status.HTTP_201_CREATED)
-async def create_staff(
+async def create_account(
     body: StaffCreate, admin: User = Depends(_admin), session: AsyncSession = Depends(get_db)
 ) -> AdminUserOut:
-    """Adds a new admin or agent directly — unlike promotion, the target
-    doesn't need an existing (customer) account first. Never sets up 2FA:
-    the new account enrols an authenticator at its own first sign-in."""
-    if not is_allowed_staff_email(body.email, get_settings()):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"Staff accounts need an address on {', '.join(get_settings().staff_email_domains)}",
-        )
-    team = body.team if body.role == UserRole.agent else None
-    if body.role == UserRole.agent and team is None:
-        team = Team.tier1
+    """Adds a new account of any role directly — unlike promotion or
+    self-registration (closed by default, Phase 23), the target doesn't
+    need an existing account first. Never sets up 2FA: the new account
+    enrols an authenticator at its own first sign-in."""
+    team: Team | None = None
+    organization_id: int | None = None
+    if body.role in (UserRole.agent, UserRole.admin):
+        if not is_allowed_staff_email(body.email, get_settings()):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"Staff accounts need an address on {', '.join(get_settings().staff_email_domains)}",
+            )
+        if body.organization_id is not None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, detail="organization_id only applies to end users"
+            )
+        team = body.team if body.role == UserRole.agent else None
+        if body.role == UserRole.agent and team is None:
+            team = Team.tier1
+    else:
+        if body.organization_id is not None:
+            await _require_active_organization(session, body.organization_id)
+        organization_id = body.organization_id
 
-    user = User(email=body.email, name=body.name, role=body.role, team=team, password_hash=hash_password(body.password))
+    user = User(
+        email=body.email, name=body.name, role=body.role, team=team, organization_id=organization_id,
+        password_hash=hash_password(body.password),
+    )
     session.add(user)
     try:
         await session.flush()
     except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Email already registered") from exc
+    after: dict = {"email": user.email, "role": user.role.value}
+    if organization_id is not None:
+        after["organization_id"] = organization_id
     await write_audit(
         session, entity_type="user", entity_id=user.id, actor_id=admin.id,
-        action="user.created", diff={"after": {"email": user.email, "role": user.role.value}},
+        action="user.created", diff={"after": after},
     )
     await session.commit()
     return AdminUserOut.model_validate(user)
@@ -234,9 +254,7 @@ async def patch_user(
                 status.HTTP_422_UNPROCESSABLE_CONTENT, detail="organization_id only applies to end users"
             )
         if changes["organization_id"] is not None:
-            org = await session.get(Organization, changes["organization_id"])
-            if org is None or not org.active:
-                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown or inactive organisation")
+            await _require_active_organization(session, changes["organization_id"])
     if role != UserRole.end_user:
         changes["organization_id"] = None
 

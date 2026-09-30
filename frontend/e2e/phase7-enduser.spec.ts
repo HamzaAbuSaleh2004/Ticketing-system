@@ -12,13 +12,19 @@ async function agentApi() {
   };
 }
 
+// Phase 23: self-registration is closed by default — an admin provisions the
+// customer account instead, then the customer signs in and enrols 2FA at
+// their own first sign-in, same as a freshly self-registered one used to.
 async function register(page: Page) {
   const email = `uma-${Date.now()}@example.com`;
-  await page.goto("/register");
-  await page.getByLabel("Name").fill("Uma Example");
+  const password = "Password123!";
+  const admin = await apiAs("admin@ticketing.demo");
+  await admin.post("/users", { email, name: "Uma Example", role: "end_user", password });
+
+  await page.goto("/login");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill("Password123!");
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Set up two-step verification" })).toBeVisible();
   await enrollTwoStep(page);
   await expect(page).toHaveURL(/\/$/);

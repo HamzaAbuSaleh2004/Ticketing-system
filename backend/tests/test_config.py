@@ -3,6 +3,15 @@ import pytest
 from app.config import Settings
 
 
+def test_allow_registration_defaults_to_closed(monkeypatch):
+    # conftest.py sets ALLOW_REGISTRATION=true in the environment so the many
+    # tests that self-register via tests.helpers keep working unchanged; this
+    # unsets it to check Settings' own default, so a regression that flips it
+    # back to open wouldn't hide behind that override.
+    monkeypatch.delenv("ALLOW_REGISTRATION", raising=False)
+    assert Settings(JWT_SECRET="x" * 32).ALLOW_REGISTRATION is False
+
+
 def test_prod_with_default_secret_refuses_to_start():
     settings = Settings(ENV="prod", JWT_SECRET="dev-secret-change-me")
     with pytest.raises(RuntimeError):

@@ -63,7 +63,9 @@ class Settings(BaseSettings):
 
     # Phase 13: admin bootstrap & production hardening
     STAFF_EMAIL_DOMAINS: str = "liverx.me"
-    ALLOW_REGISTRATION: bool = True
+    # Phase 23: accounts are admin-provisioned only (POST /users, any role) -
+    # self-registration is closed by default.
+    ALLOW_REGISTRATION: bool = False
     LOGIN_MAX_FAILED_ATTEMPTS: int = 10
     LOGIN_ATTEMPT_WINDOW_MINUTES: int = 15
     # Only the first hop of X-Forwarded-For is trusted, and only when this is

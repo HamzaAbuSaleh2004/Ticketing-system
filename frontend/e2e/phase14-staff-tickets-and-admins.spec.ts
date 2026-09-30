@@ -10,7 +10,7 @@ async function axe(page: Page, label: string) {
   expect(summary, label).toEqual([]);
 }
 
-test("agent creates an unclaimed ticket for an organisation, then links it to a customer who just registered", async ({
+test("agent creates an unclaimed ticket for an organisation, then links it to a customer an admin just provisioned", async ({
   page,
   browser,
 }) => {
@@ -39,15 +39,15 @@ test("agent creates an unclaimed ticket for an organisation, then links it to a 
   await expect(page.getByText("No customer linked yet.")).toBeVisible();
   await expect(ticketSection.getByText(orgName, { exact: true })).toBeVisible();
 
-  // A brand-new customer registers, unrelated to this ticket so far.
+  // A brand-new customer account, provisioned by an admin (self-registration
+  // is closed by default, Phase 23), unrelated to this ticket so far.
   const customerCtx = await browser.newContext();
   const customerPage = await customerCtx.newPage();
   const email = `harborline-contact-${stamp}@example.com`;
-  await customerPage.goto("/register");
-  await customerPage.getByLabel("Name").fill("Harborline Contact");
-  await customerPage.getByLabel("Email").fill(email);
-  await customerPage.getByLabel("Password").fill("Password123!");
-  await customerPage.getByRole("button", { name: "Create account" }).click();
+  const customerPassword = "Password123!";
+  await admin.post("/users", { email, name: "Harborline Contact", role: "end_user", password: customerPassword });
+  await signInPassword(customerPage, email, customerPassword);
+  await expect(customerPage.getByRole("heading", { name: "Set up two-step verification" })).toBeVisible();
   await enrollTwoStep(customerPage);
   await expect(customerPage).toHaveURL(/\/$/);
   await expect(customerPage.getByText("You haven't sent us anything yet")).toBeVisible();
@@ -73,8 +73,8 @@ test("admin creates a new admin account, who signs in and can demote the first o
   await page.setViewportSize({ width: 1280, height: 900 });
   await signIn(page, "admin@ticketing.demo");
   await page.goto("/admin?tab=users");
-  await page.getByRole("button", { name: "Add admin or agent" }).click();
-  const dialog = page.getByRole("dialog", { name: "Add admin or agent" });
+  await page.getByRole("button", { name: "Add account" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add account" });
   await expect(dialog).toBeVisible();
   await dialog.getByLabel(/^Name/).fill(name);
   await dialog.getByLabel(/^Email/).fill(email);

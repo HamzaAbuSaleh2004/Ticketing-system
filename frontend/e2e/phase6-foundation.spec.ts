@@ -1,7 +1,17 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { apiAs } from "./api";
 import { enrollTwoStep, settled, shot, signIn, signInPassword } from "./helpers";
 import { nextCode } from "./totp";
+
+/** Phase 23: self-registration is closed by default — an admin provisions
+ * the account instead. What these tests actually exercise (the enrolment
+ * screens, a wrong code, recovery codes) is unchanged: it's the same "no
+ * two-step yet" first sign-in either way. */
+async function provisionCustomer(email: string, name: string, password: string) {
+  const admin = await apiAs("admin@ticketing.demo");
+  await admin.post("/users", { email, name, role: "end_user", password });
+}
 
 for (const colorScheme of ["light", "dark"] as const) {
   test.describe(`${colorScheme} theme`, () => {
@@ -75,13 +85,11 @@ test("wrong password shows a clear error", async ({ page }) => {
   await expect(page.getByText("That email and password don't match an account.")).toBeVisible();
 });
 
-test("register creates an end-user account and lands on the portal", async ({ page }) => {
+test("an admin-provisioned account signs in and enrols two-step verification, landing on the portal", async ({ page }) => {
   const email = `e2e-${Date.now()}@example.com`;
-  await page.goto("/register");
-  await page.getByLabel("Name").fill("Pat Example");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill("Password123!");
-  await page.getByRole("button", { name: "Create account" }).click();
+  await provisionCustomer(email, "Pat Example", "Password123!");
+  await signInPassword(page, email, "Password123!");
+  await expect(page.getByRole("heading", { name: "Set up two-step verification" })).toBeVisible();
   await enrollTwoStep(page);
   await expect(page).toHaveURL(/\/$/);
 });
@@ -89,11 +97,8 @@ test("register creates an end-user account and lands on the portal", async ({ pa
 test("two-step verification: setup screens, a wrong code, and a recovery code", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   const email = `twostep-${Date.now()}@example.com`;
-  await page.goto("/register");
-  await page.getByLabel("Name").fill("Sam Example");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill("Password123!");
-  await page.getByRole("button", { name: "Create account" }).click();
+  await provisionCustomer(email, "Sam Example", "Password123!");
+  await signInPassword(page, email, "Password123!");
 
   // Setup: QR code plus the manual key; a wrong code is refused.
   await expect(page.getByRole("heading", { name: "Set up two-step verification" })).toBeVisible();

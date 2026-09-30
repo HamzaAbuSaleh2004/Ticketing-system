@@ -93,9 +93,14 @@ test("admin: categories and team edits are saved and logged", async ({ page }) =
   const stamp = Date.now() % 1_000_000;
   const who = `Lou Lostphone ${stamp}`;
   const email = `lost-phone-${stamp}@example.com`;
-  const reg = await (await admin.ctx.post("/auth/register", { data: { email, password: "Password123!", name: who } })).json();
-  const setup = await (await admin.ctx.post("/auth/2fa/setup", { data: { mfa_token: reg.mfa_token } })).json();
-  const enabled = await admin.ctx.post("/auth/2fa/enable", { data: { mfa_token: reg.mfa_token, code: await nextCode(email, setup.secret) } });
+  const password = "Password123!";
+  // Phase 23: self-registration is closed by default — an admin provisions
+  // the account; its first login still returns an "enrol" challenge, same
+  // shape as a self-registered account used to.
+  await admin.post("/users", { email, name: who, role: "end_user", password });
+  const login = await (await admin.ctx.post("/auth/login", { data: { email, password } })).json();
+  const setup = await (await admin.ctx.post("/auth/2fa/setup", { data: { mfa_token: login.mfa_token } })).json();
+  const enabled = await admin.ctx.post("/auth/2fa/enable", { data: { mfa_token: login.mfa_token, code: await nextCode(email, setup.secret) } });
   expect(enabled.ok()).toBeTruthy();
   // Made through the API after the table loaded, so load it again.
   await page.goto("/admin?tab=users");

@@ -19,6 +19,10 @@ MAINTENANCE_DATABASE_URL = f"{_base}/postgres".replace("+asyncpg", "")
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-prod-32-bytes-min")
+# Most tests still self-register via tests.helpers.register()/register_full();
+# the "closed by default" behavior itself is covered directly by the test
+# that overrides this back to false.
+os.environ.setdefault("ALLOW_REGISTRATION", "true")
 
 import asyncio
 import subprocess
