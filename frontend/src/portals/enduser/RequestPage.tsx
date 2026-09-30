@@ -1,5 +1,4 @@
 import ArrowBackOutlined from "@mui/icons-material/ArrowBackOutlined";
-import AttachFileOutlined from "@mui/icons-material/AttachFileOutlined";
 import { Alert, Box, Button, Link, Skeleton, Snackbar, Stack, TextField, Typography } from "@mui/material";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -7,7 +6,7 @@ import { errorMessage } from "../../api/client";
 import { useCategoryName, useReply, useTicket } from "../../api/hooks";
 import type { Comment, TicketDetailPublic } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
-import { downloadAttachment } from "../../lib/download";
+import { AttachmentList } from "../../components/AttachmentList";
 import { PRIORITY_LABEL, absoluteTime, relativeTime, replyMode, ticketRef } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
 import { typescale } from "../../theme/tokens";
@@ -249,17 +248,7 @@ export function RequestPage() {
           <Typography variant="titleSmall" component="h2" sx={{ mb: 1 }}>
             Attachments
           </Typography>
-          <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
-            {ticket.attachments.map((a) => (
-              <Button
-                key={a.id}
-                startIcon={<AttachFileOutlined />}
-                onClick={() => downloadAttachment(a.id, a.filename).catch(() => setToast("That file couldn't be downloaded."))}
-              >
-                {a.filename}
-              </Button>
-            ))}
-          </Stack>
+          <AttachmentList attachments={ticket.attachments} onError={() => setToast("That attachment couldn't be opened.")} />
         </Box>
       ) : null}
 

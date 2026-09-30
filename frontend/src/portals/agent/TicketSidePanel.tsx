@@ -10,6 +10,7 @@ import {
   useStaff,
 } from "../../api/hooks";
 import type { TicketDetail, TicketPatch, TicketPriority } from "../../api/types";
+import { SectionCaption } from "../../components/SectionCaption";
 import { SlaIndicator } from "../../components/SlaIndicator";
 import { statusHint, statusOptions } from "../../lib/lifecycle";
 import { PRIORITY_LABEL, STATUS_LABEL, absoluteTime } from "../../lib/tickets";
@@ -62,20 +63,22 @@ export function TicketSidePanel({
 
   return (
     <Stack spacing={2}>
-      <Box>
+      <Stack spacing={1}>
+        <SectionCaption>SLA</SectionCaption>
         <SlaIndicator ticket={ticket} size="large" />
-        <Stack spacing={0.25} sx={{ mt: 1.5 }}>
+        <Stack spacing={0.25}>
           <Due label="First reply due" at={ticket.sla_response_due} done={ticket.first_responded_at ? `Replied ${absoluteTime(ticket.first_responded_at)}` : null} />
           <Due label="Resolve by" at={ticket.sla_resolution_due} done={null} />
           {ticket.sla_paused_total_seconds > 0 ? (
             <Due label="Paused so far" at={null} done={`${Math.round(ticket.sla_paused_total_seconds / 60)} min`} />
           ) : null}
         </Stack>
-      </Box>
+      </Stack>
 
       <Divider />
 
       <Stack spacing={1.5}>
+        <SectionCaption>Status &amp; assignment</SectionCaption>
         <TextField
           select
           label="Status"
@@ -174,7 +177,12 @@ export function TicketSidePanel({
             </TextField>
           ) : null}
         </Stack>
+      </Stack>
 
+      <Divider />
+
+      <Stack spacing={1.5}>
+        <SectionCaption>Priority &amp; category</SectionCaption>
         <Stack direction="row" sx={{ gap: 1 }}>
           <TextField
             select
@@ -208,7 +216,12 @@ export function TicketSidePanel({
             ))}
           </TextField>
         </Stack>
+      </Stack>
 
+      <Divider />
+
+      <Stack spacing={1.5}>
+        <SectionCaption>Organisation</SectionCaption>
         <TextField
           select
           label="Organisation"
@@ -237,7 +250,12 @@ export function TicketSidePanel({
               </MenuItem>
             ))}
         </TextField>
+      </Stack>
 
+      <Divider />
+
+      <Stack spacing={1}>
+        <SectionCaption>Escalate</SectionCaption>
         <Box>
           <Button
             size="small"

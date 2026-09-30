@@ -1,79 +1,24 @@
 import ArrowBackOutlined from "@mui/icons-material/ArrowBackOutlined";
-import { Box, Button, ButtonBase, Link, Skeleton, Snackbar, Stack, Typography, useMediaQuery } from "@mui/material";
+import { Box, Button, Link, Skeleton, Snackbar, Stack, Typography, useMediaQuery } from "@mui/material";
 import { useCallback, useMemo, useState } from "react";
-import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link as RouterLink, useParams, useSearchParams } from "react-router-dom";
 import { errorMessage } from "../../api/client";
-import { useAgentTicket, usePatchTicket, useQueue } from "../../api/hooks";
+import { useAgentTicket, usePatchTicket } from "../../api/hooks";
 import type { TicketPatch } from "../../api/types";
+import { SectionCaption } from "../../components/SectionCaption";
 import { OrganizationKindChip, PriorityChip, StatusChip } from "../../components/TicketChips";
 import { absoluteTime, ticketRef } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
 import { Composer, AgentThread } from "./AgentThread";
 import { ClaimCustomer } from "./ClaimCustomer";
-import { apiQuery, readFilters } from "./queueParams";
 import { TicketSidePanel } from "./TicketSidePanel";
-import { useListKeys } from "./useListKeys";
 
 const pane = { borderRadius: "var(--md-sys-shape-corner-small)", overflowY: "auto", minHeight: 0 } as const;
-
-/** Narrow queue pane (large windows): the same filtered queue, one row per
- * ticket, so the arrow keys walk tickets without leaving the workspace. */
-function QueuePane({ currentId, search, keysEnabled }: { currentId: number; search: string; keysEnabled: boolean }) {
-  const [params] = useSearchParams();
-  const navigate = useNavigate();
-  const queue = useQueue(apiQuery(readFilters(params)));
-  const rows = queue.data?.items ?? [];
-  const index = rows.findIndex((r) => r.id === currentId);
-  const open = useCallback((i: number) => rows[i] && navigate(`/agent/tickets/${rows[i].id}${search}`), [rows, navigate, search]);
-  useListKeys(rows.length, index, open, open, keysEnabled);
-
-  return (
-    <Box component="nav" aria-label="Queue" sx={{ ...pane, bgcolor: sys("surface") }}>
-      <Box component="ol" sx={{ listStyle: "none", p: 0, m: 0 }}>
-        {rows.map((t) => {
-          const current = t.id === currentId;
-          return (
-            <li key={t.id}>
-              <ButtonBase
-                component={RouterLink}
-                to={`/agent/tickets/${t.id}${search}`}
-                aria-current={current ? "page" : undefined}
-                sx={{
-                  width: "100%",
-                  display: "grid",
-                  gridTemplateColumns: "1fr auto",
-                  alignItems: "center",
-                  textAlign: "left",
-                  gap: 0.25,
-                  columnGap: 1,
-                  px: 1.5,
-                  py: 1,
-                  borderBottom: `1px solid ${sys("outlineVariant")}`,
-                  bgcolor: current ? sys("surfaceContainerHighest") : "transparent",
-                  boxShadow: current ? `inset 3px 0 0 ${sys("primary")}` : "none",
-                  "&:hover": { bgcolor: current ? sys("surfaceContainerHighest") : sys("surfaceContainerLow") },
-                }}
-              >
-                <Typography variant="labelMedium" className="tabular" sx={{ color: sys("onSurfaceVariant") }}>
-                  {ticketRef(t.id)}
-                </Typography>
-                <Typography variant="bodyMedium" sx={{ gridColumn: "1 / -1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: current ? 500 : 400 }}>
-                  {t.subject}
-                </Typography>
-              </ButtonBase>
-            </li>
-          );
-        })}
-      </Box>
-    </Box>
-  );
-}
 
 export function AgentTicketPage() {
   const id = Number(useParams().id);
   const [params] = useSearchParams();
   const search = params.size ? `?${params}` : "";
-  const threePane = useMediaQuery("(min-width:1200px)", { noSsr: true });
   const twoPane = useMediaQuery("(min-width:840px)", { noSsr: true });
 
   const { data: ticket, isLoading } = useAgentTicket(id);
@@ -86,10 +31,7 @@ export function AgentTicketPage() {
     [patch],
   );
   const onError = useCallback((fallback: string) => (e: unknown) => setToast(errorMessage(e, fallback)), []);
-  const columns = useMemo(
-    () => (threePane ? "300px minmax(0,1fr) 360px" : twoPane ? "minmax(0,1fr) 340px" : "1fr"),
-    [threePane, twoPane],
-  );
+  const columns = useMemo(() => (twoPane ? "minmax(0,1fr) 360px" : "1fr"), [twoPane]);
 
   if (isLoading) {
     return (
@@ -123,16 +65,11 @@ export function AgentTicketPage() {
         bgcolor: sys("surface"),
       }}
     >
-      {/* Arrow keys switch tickets, so they pause while there's an unsent draft. */}
-      {threePane ? <QueuePane currentId={id} search={search} keysEnabled={!draft.body.trim()} /> : null}
-
       <Box component="section" aria-label="Ticket" sx={{ ...pane, bgcolor: sys("surfaceContainerHigh"), p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
         <Stack direction="row" sx={{ alignItems: "center", gap: 1 }}>
-          {!threePane ? (
-            <Button component={RouterLink} to={`/agent${search}`} size="small" startIcon={<ArrowBackOutlined />} sx={{ ml: -1 }}>
-              Queue
-            </Button>
-          ) : null}
+          <Button component={RouterLink} to={`/agent${search}`} size="small" startIcon={<ArrowBackOutlined />} sx={{ ml: -1 }}>
+            Queue
+          </Button>
           <Typography variant="labelLarge" className="tabular" sx={{ color: sys("onSurfaceVariant") }}>
             {ticketRef(ticket.id)}
           </Typography>
@@ -174,7 +111,19 @@ export function AgentTicketPage() {
             </Box>
           )}
         </Box>
-        <AgentThread ticket={ticket} />
+        <Box
+          component="section"
+          aria-label="Description"
+          sx={{ p: 1.5, borderRadius: "var(--md-sys-shape-corner-small)", border: `1px solid ${sys("outlineVariant")}` }}
+        >
+          <Box sx={{ mb: 0.5 }}>
+            <SectionCaption>Description</SectionCaption>
+          </Box>
+          <Typography variant="bodyMedium" sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+            {ticket.description}
+          </Typography>
+        </Box>
+        <AgentThread ticket={ticket} onError={() => setToast("That attachment couldn't be opened.")} />
         <Box sx={{ mt: "auto", pt: 1 }}>
           <Composer ticket={ticket} draft={draft} onDraftChange={setDraft} />
         </Box>

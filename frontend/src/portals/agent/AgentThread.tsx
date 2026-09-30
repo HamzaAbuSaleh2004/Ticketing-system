@@ -1,11 +1,11 @@
-import AttachFileOutlined from "@mui/icons-material/AttachFileOutlined";
 import LockOutlined from "@mui/icons-material/LockOutlined";
 import { Alert, Box, Button, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { errorMessage } from "../../api/client";
 import { useReply } from "../../api/hooks";
 import type { Comment, TicketDetail } from "../../api/types";
-import { downloadAttachment } from "../../lib/download";
+import { AttachmentList } from "../../components/AttachmentList";
+import { SectionCaption } from "../../components/SectionCaption";
 import { absoluteTime, relativeTime } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
 
@@ -67,8 +67,7 @@ export function Composer({
   const internal = draft.internal;
   const locked = ticket.status === "closed" && !internal;
 
-  function onSubmit(e: FormEvent) {
-    e.preventDefault();
+  function send() {
     if (!draft.body.trim()) {
       setEmptyTried(true);
       return;
@@ -78,6 +77,22 @@ export function Composer({
       { body: draft.body.trim(), is_internal_note: internal },
       { onSuccess: () => onDraftChange({ body: "", internal }) },
     );
+  }
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    send();
+  }
+
+  // Enter sends, Shift+Enter inserts a newline - the standard convention.
+  // isComposing excludes the Enter that confirms an IME composition (CJK
+  // input); isPending stops a held/repeated Enter from sending twice before
+  // the first request resolves and clears the draft.
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      if (!reply.isPending) send();
+    }
   }
 
   return (
@@ -125,21 +140,22 @@ export function Composer({
           {errorMessage(reply.error, "That didn't send. Try again.")}
         </Alert>
       ) : null}
-      <TextField
-        value={draft.body}
-        onChange={(e) => onDraftChange({ ...draft, body: e.target.value })}
-        placeholder={internal ? "Add context for the team" : "Write a reply"}
-        multiline
-        minRows={3}
-        maxRows={12}
-        fullWidth
-        slotProps={{ htmlInput: { "aria-label": internal ? "Internal note" : "Reply" } }}
-        error={emptyTried && !draft.body.trim()}
-        helperText={emptyTried && !draft.body.trim() ? "Write something first" : undefined}
-        sx={{ "& .MuiOutlinedInput-root": { bgcolor: sys("surface") } }}
-      />
-      <Stack direction="row" sx={{ justifyContent: "flex-end", mt: 1 }}>
-        <Button type="submit" variant="contained" disabled={reply.isPending}>
+      <Stack direction="row" sx={{ gap: 1, alignItems: "flex-end" }}>
+        <TextField
+          value={draft.body}
+          onChange={(e) => onDraftChange({ ...draft, body: e.target.value })}
+          onKeyDown={onKeyDown}
+          placeholder={internal ? "Add context for the team" : "Write a reply"}
+          multiline
+          minRows={3}
+          maxRows={24}
+          fullWidth
+          slotProps={{ htmlInput: { "aria-label": internal ? "Internal note" : "Reply" } }}
+          error={emptyTried && !draft.body.trim()}
+          helperText={emptyTried && !draft.body.trim() ? "Write something first" : "Enter to send, Shift+Enter for a new line"}
+          sx={{ "& .MuiOutlinedInput-root": { bgcolor: sys("surface") } }}
+        />
+        <Button type="submit" variant="contained" disabled={reply.isPending} sx={{ flexShrink: 0 }}>
           {reply.isPending ? "Sending…" : internal ? "Add internal note" : "Send reply"}
         </Button>
       </Stack>
@@ -147,33 +163,26 @@ export function Composer({
   );
 }
 
-export function AgentThread({ ticket }: { ticket: TicketDetail }) {
+export function AgentThread({ ticket, onError }: { ticket: TicketDetail; onError?: () => void }) {
   return (
-    <Box component="ol" aria-label="Conversation" sx={{ listStyle: "none", p: 0, m: 0, display: "grid", gap: 1 }}>
-      <Message
-        author={ticket.requester_name ?? "No customer linked yet"}
-        role="Customer"
-        at={ticket.created_at}
-        body={ticket.description}
-        internal={false}
-      />
-      {ticket.comments.map((c) => (
-        <Message key={c.id} author={c.author_name} role={roleLabel(c)} at={c.created_at} body={c.body} internal={c.is_internal_note} />
-      ))}
-      {ticket.attachments.length ? (
-        <Box component="li" sx={{ display: "flex", flexWrap: "wrap", gap: 1, pt: 0.5 }}>
-          {ticket.attachments.map((a) => (
-            <Button
-              key={a.id}
-              size="small"
-              startIcon={<AttachFileOutlined />}
-              onClick={() => downloadAttachment(a.id, a.filename).catch(() => undefined)}
-            >
-              {a.filename}
-            </Button>
-          ))}
-        </Box>
-      ) : null}
+    <Box sx={{ display: "grid", gap: 1 }}>
+      <SectionCaption>Conversation</SectionCaption>
+      <Box component="ol" aria-label="Conversation" sx={{ listStyle: "none", p: 0, m: 0, display: "grid", gap: 1 }}>
+        {ticket.comments.length === 0 ? (
+          <Typography component="li" variant="bodyMedium" sx={{ color: sys("onSurfaceVariant"), listStyle: "none" }}>
+            No replies yet.
+          </Typography>
+        ) : (
+          ticket.comments.map((c) => (
+            <Message key={c.id} author={c.author_name} role={roleLabel(c)} at={c.created_at} body={c.body} internal={c.is_internal_note} />
+          ))
+        )}
+        {ticket.attachments.length ? (
+          <Box component="li" sx={{ pt: 0.5 }}>
+            <AttachmentList attachments={ticket.attachments} onError={onError} />
+          </Box>
+        ) : null}
+      </Box>
     </Box>
   );
 }
