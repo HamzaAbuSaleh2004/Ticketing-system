@@ -20,7 +20,7 @@ export type MfaChallenge = { mfa_token: string; mfa: "enroll" | "verify" };
 export type MfaSetup = { secret: string; otpauth_uri: string; qr_svg_data_uri: string };
 export type MfaEnabled = TokenResponse & { recovery_codes: string[] };
 
-export type TicketStatus = "new" | "triaged" | "open" | "in_progress" | "pending" | "resolved" | "closed";
+export type TicketStatus = "open" | "in_progress" | "pending" | "resolved" | "closed";
 export type TicketPriority = "low" | "normal" | "high" | "urgent";
 
 export type Category = { id: number; name: string; slug: string; active: boolean };
@@ -51,8 +51,6 @@ export type TicketListItem = {
   requester_id: number | null;
   assignee_id: number | null;
   escalated: boolean;
-  sla_response_due: string | null;
-  sla_resolution_due: string | null;
   created_at: string;
   updated_at: string;
   organization_id: number | null;
@@ -85,7 +83,6 @@ export type Attachment = {
 
 export type TicketDetailPublic = TicketListItem & {
   description: string;
-  sla_paused_at: string | null;
   first_responded_at: string | null;
   parent_ticket_id: number | null;
   resolved_at: string | null;
@@ -99,9 +96,7 @@ export type TicketDetailPublic = TicketListItem & {
 export type TicketQueueItem = TicketListItem & {
   requester_name: string | null;
   assignee_name: string | null;
-  sla_paused_at: string | null;
   first_responded_at: string | null;
-  sla_paused_total_seconds: number;
 };
 
 export type TicketQueue = { items: TicketQueueItem[]; total: number; page: number; page_size: number };
@@ -116,7 +111,6 @@ export type AuditEntry = {
 };
 
 export type TicketDetail = TicketDetailPublic & {
-  sla_paused_total_seconds: number;
   requester_name: string | null;
   requester_email: string | null;
   assignee_name: string | null;

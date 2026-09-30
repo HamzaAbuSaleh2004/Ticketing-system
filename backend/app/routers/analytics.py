@@ -14,8 +14,6 @@ from app.models.enums import TicketStatus, UserRole
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 _BACKLOG_STATUSES = [
-    TicketStatus.new,
-    TicketStatus.triaged,
     TicketStatus.open,
     TicketStatus.in_progress,
     TicketStatus.pending,
@@ -39,12 +37,6 @@ class StatusCount(BaseModel):
     count: int
 
 
-class Breaches(BaseModel):
-    total: int
-    response: int
-    resolution: int
-
-
 class OrganizationCount(BaseModel):
     name: str
     count: int
@@ -58,7 +50,6 @@ class AnalyticsSummary(BaseModel):
     first_response: DurationStats
     resolution: DurationStats
     backlog: list[StatusCount]
-    sla_breaches: Breaches
     backlog_by_organization: list[OrganizationCount]
 
 
@@ -84,11 +75,10 @@ _FIRST_RESPONSE = text("""
     ) x
 """)
 
-# Resolution time excludes time spent paused while pending.
 _RESOLUTION = text("""
     SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY s) AS median, avg(s) AS mean, count(*) AS n
     FROM (
-        SELECT extract(epoch FROM resolved_at - created_at) - sla_paused_total_seconds AS s
+        SELECT extract(epoch FROM resolved_at - created_at) AS s
         FROM tickets
         WHERE created_at >= :start AND created_at < :end AND resolved_at IS NOT NULL
     ) x
@@ -118,29 +108,6 @@ _BACKLOG_NO_ORG = text("""
     SELECT count(*) AS n
     FROM tickets t
     WHERE t.status::text = ANY(:statuses) AND t.organization_id IS NULL
-""")
-
-# A response SLA is breached if the first public reply came late, or never
-# came before resolution/now. A resolution SLA is breached if it was resolved
-# late, or is still running past due; a paused ticket only counts if it was
-# already late when it paused (the clock is frozen while pending).
-_BREACHES = text("""
-    SELECT
-        count(*) FILTER (WHERE response_breached OR resolution_breached) AS total,
-        count(*) FILTER (WHERE response_breached) AS response,
-        count(*) FILTER (WHERE resolution_breached) AS resolution
-    FROM (
-        SELECT
-            (first_responded_at IS NOT NULL AND first_responded_at > sla_response_due)
-            OR (first_responded_at IS NULL AND coalesce(resolved_at, CAST(:now AS timestamptz)) > sla_response_due)
-                AS response_breached,
-            (resolved_at IS NOT NULL AND resolved_at > sla_resolution_due)
-            OR (resolved_at IS NULL AND sla_paused_at IS NULL AND CAST(:now AS timestamptz) > sla_resolution_due)
-            OR (resolved_at IS NULL AND sla_paused_at IS NOT NULL AND sla_paused_at > sla_resolution_due)
-                AS resolution_breached
-        FROM tickets
-        WHERE created_at >= :start AND created_at < :end
-    ) x
 """)
 
 
@@ -180,7 +147,6 @@ async def summary(
     resolution = _stats((await session.execute(_RESOLUTION, window)).one())
     backlog_statuses = {"statuses": [s.value for s in _BACKLOG_STATUSES]}
     backlog_rows = {r.status: r.n for r in await session.execute(_BACKLOG, backlog_statuses)}
-    breaches = (await session.execute(_BREACHES, {**window, "now": now})).one()
     org_rows = list(await session.execute(_BACKLOG_BY_ORG, backlog_statuses))
     no_org_n = (await session.execute(_BACKLOG_NO_ORG, backlog_statuses)).scalar() or 0
 
@@ -192,7 +158,6 @@ async def summary(
         first_response=first_response,
         resolution=resolution,
         backlog=[StatusCount(status=s, count=backlog_rows.get(s.value, 0)) for s in _BACKLOG_STATUSES],
-        sla_breaches=Breaches(total=breaches.total, response=breaches.response, resolution=breaches.resolution),
         backlog_by_organization=[
             *(OrganizationCount(name=r.name, count=r.n) for r in org_rows),
             OrganizationCount(name="No organisation", count=no_org_n),

@@ -3,8 +3,6 @@ import type { TicketPriority, TicketStatus } from "../api/types";
 export const ticketRef = (id: number) => `TCK-${String(id).padStart(5, "0")}`;
 
 export const STATUS_LABEL: Record<TicketStatus, string> = {
-  new: "New",
-  triaged: "Triaged",
   open: "Open",
   in_progress: "In progress",
   pending: "Pending",
@@ -23,9 +21,7 @@ export const PRIORITY_SHORT: Record<TicketPriority, string> = { urgent: "Urgent"
 
 /** The end-user portal speaks in what's happening, not in workflow states. */
 export const CUSTOMER_STATUS: Record<TicketStatus, { label: string; line: string }> = {
-  new: { label: "Received", line: "We're reviewing this" },
-  triaged: { label: "Received", line: "Queued for the right team" },
-  open: { label: "In progress", line: "An agent has picked this up" },
+  open: { label: "Received", line: "We're reviewing this" },
   in_progress: { label: "In progress", line: "An agent is working on it" },
   pending: { label: "Waiting on you", line: "We need a reply from you to continue" },
   resolved: { label: "Resolved", line: "Reply if it isn't fixed" },
@@ -90,6 +86,19 @@ export function compactAgo(iso: string, now: Date = new Date()): string {
 
 export const absoluteTime = (iso: string) =>
   new Date(iso).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
+
+const MIN = 60_000;
+const HOUR = 60 * MIN;
+const DAY = 24 * HOUR;
+
+/** "3d 4h", "2h 05m", "12m", "<1m" — a duration, not a point in time. */
+export function formatDuration(ms: number): string {
+  const abs = Math.abs(ms);
+  if (abs >= DAY) return `${Math.floor(abs / DAY)}d ${Math.floor((abs % DAY) / HOUR)}h`;
+  if (abs >= HOUR) return `${Math.floor(abs / HOUR)}h ${String(Math.floor((abs % HOUR) / MIN)).padStart(2, "0")}m`;
+  if (abs >= MIN) return `${Math.floor(abs / MIN)}m`;
+  return "<1m";
+}
 
 /** "Customer 2", "LiverX 1", "Customer 1, LiverX 2", or null when nothing's
  * open on either side — as text, not colour alone, per the brief's queue rule. */

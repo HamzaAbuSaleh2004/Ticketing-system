@@ -4,24 +4,15 @@ import pyotp
 
 from app.auth.security import hash_password
 from app.domain import clock
-from app.models import Category, SlaPolicy, User
-from app.models.enums import Team, TicketPriority, UserRole
+from app.models import Category, User
+from app.models.enums import Team, UserRole
 from app.seed import CATEGORIES
 
 # Accounts made directly in the DB (create_agent) have 2FA set up on this.
 TEST_TOTP_SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
 
-SLA_POLICIES = [
-    {"name": "Urgent", "priority": TicketPriority.urgent, "response_minutes": 15, "resolution_minutes": 4 * 60},
-    {"name": "High", "priority": TicketPriority.high, "response_minutes": 60, "resolution_minutes": 8 * 60},
-    {"name": "Normal", "priority": TicketPriority.normal, "response_minutes": 4 * 60, "resolution_minutes": 24 * 60},
-    {"name": "Low", "priority": TicketPriority.low, "response_minutes": 8 * 60, "resolution_minutes": 72 * 60},
-]
-
 
 async def seed_reference_data(db_session) -> None:
-    for p in SLA_POLICIES:
-        db_session.add(SlaPolicy(**p))
     for c in CATEGORIES:
         db_session.add(Category(name=c["name"], slug=c["slug"], active=True))
     await db_session.commit()

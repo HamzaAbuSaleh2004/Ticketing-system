@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -19,7 +19,7 @@ class Ticket(Base):
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[TicketStatus] = mapped_column(
-        ticket_status_enum, nullable=False, default=TicketStatus.new, index=True
+        ticket_status_enum, nullable=False, default=TicketStatus.open, index=True
     )
     priority: Mapped[TicketPriority] = mapped_column(
         ticket_priority_enum, nullable=False, default=TicketPriority.normal, index=True
@@ -39,14 +39,7 @@ class Ticket(Base):
     requester_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
 
-    sla_response_due: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    sla_resolution_due: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    # §2 addition: the resolution clock pauses while status = pending.
-    sla_paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    sla_paused_total_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-
-    # §2 addition: needed for first-response-time analytics and the response SLA.
+    # §2 addition: first-response-time analytics.
     first_responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # §2 addition: the linked follow-up ticket created when a customer replies on a closed ticket.

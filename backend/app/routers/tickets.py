@@ -3,7 +3,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
-from sqlalchemy import ColumnElement, case, func, or_, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 
@@ -18,12 +18,6 @@ from app.domain.lifecycle import (
     can_escalate,
     customer_reply_outcome,
     validate_transition,
-)
-from app.domain.sla import (
-    compute_due_dates,
-    enter_pending,
-    leave_pending,
-    mark_first_response,
 )
 from app.models import (
     Attachment,
@@ -54,7 +48,7 @@ from app.schemas.ticket import (
     TicketQueueItem,
     TicketQueueResponse,
 )
-from app.services.tickets import escalate, get_policy, lock_ticket, set_priority
+from app.services.tickets import escalate, lock_ticket, set_priority
 from app.storage import Storage, get_storage
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
@@ -95,22 +89,6 @@ _SORTABLE_COLUMNS: dict[str, ColumnElement] = {
     "updated_at": Ticket.updated_at,
     "priority": Ticket.priority,
     "status": Ticket.status,
-    "sla_resolution_due": Ticket.sla_resolution_due,
-    # The next deadline that matters: first reply while unanswered, then
-    # resolution. A paused ticket's stored due date is frozen (it only moves
-    # on resume), so it sorts by where the deadline would be if resumed now,
-    # instead of floating to the top as "overdue" while nobody can act.
-    "sla_due": case(
-        (
-            Ticket.first_responded_at.is_(None),
-            func.least(Ticket.sla_response_due, Ticket.sla_resolution_due),
-        ),
-        (
-            Ticket.sla_paused_at.is_not(None),
-            Ticket.sla_resolution_due + (func.now() - Ticket.sla_paused_at),
-        ),
-        else_=Ticket.sla_resolution_due,
-    ),
 }
 
 _AGENT_ROLES = (UserRole.agent, UserRole.admin)
@@ -209,7 +187,6 @@ async def _build_ticket_detail(
     assignee = await session.get(User, ticket.assignee_id) if ticket.assignee_id else None
     return TicketDetail(
         **public.model_dump(),
-        sla_paused_total_seconds=ticket.sla_paused_total_seconds,
         requester_name=requester.name if requester else None,
         requester_email=requester.email if requester else None,
         assignee_name=assignee.name if assignee else None,
@@ -245,13 +222,8 @@ async def create_ticket(
     session: AsyncSession = Depends(get_db),
 ) -> TicketDetail | TicketDetailPublic:
     now = clock.now()
-    # Every new ticket starts at the default priority; an agent triages it by
-    # hand (category, priority, then new -> triaged).
-    policy = await get_policy(session, TicketPriority.normal)
-    response_due, resolution_due = compute_due_dates(
-        now, response_minutes=policy.response_minutes, resolution_minutes=policy.resolution_minutes
-    )
-
+    # Every new ticket starts at the default priority and status; an agent
+    # triages it by hand (category, priority, assignee).
     if _is_agent(user):
         # On behalf of a customer: either claimed immediately (an existing
         # end_user, organisation inherited from them) or unclaimed (no
@@ -279,12 +251,10 @@ async def create_ticket(
     ticket = Ticket(
         subject=body.subject,
         description=body.description,
-        status=TicketStatus.new,
+        status=TicketStatus.open,
         priority=TicketPriority.normal,
         requester_id=requester_id,
         organization_id=organization_id,
-        sla_response_due=response_due,
-        sla_resolution_due=resolution_due,
         created_at=now,
     )
     session.add(ticket)
@@ -296,7 +266,7 @@ async def create_ticket(
         entity_id=ticket.id,
         actor_id=user.id,
         action="ticket.created",
-        diff={"after": {"status": "new", "priority": "normal"}},
+        diff={"after": {"status": "open", "priority": "normal"}},
     )
     await session.commit()
     await session.refresh(ticket)
@@ -432,9 +402,7 @@ async def list_tickets(
                 **_item(t, org_name, org_kind, oc, ol).model_dump(),
                 requester_name=requester_name,
                 assignee_name=assignee_name,
-                sla_paused_at=t.sla_paused_at,
                 first_responded_at=t.first_responded_at,
-                sla_paused_total_seconds=t.sla_paused_total_seconds,
             )
             for t, requester_name, assignee_name, org_name, org_kind, oc, ol in rows
         ],
@@ -485,7 +453,7 @@ async def patch_ticket(
 
     if changes.get("priority") is not None and changes["priority"] != ticket.priority:
         before["priority"] = ticket.priority.value
-        await set_priority(session, ticket, changes["priority"])
+        set_priority(ticket, changes["priority"])
         after["priority"] = ticket.priority.value
 
     if "category" in changes and changes["category"] != ticket.category:
@@ -547,17 +515,6 @@ async def patch_ticket(
 
         before["status"] = ticket.status.value
 
-        if target is TicketStatus.pending:
-            ticket.sla_paused_at = enter_pending(now)
-        elif ticket.status is TicketStatus.pending and target is TicketStatus.in_progress:
-            ticket.sla_resolution_due, ticket.sla_paused_total_seconds = leave_pending(
-                resolution_due=ticket.sla_resolution_due,
-                paused_at=ticket.sla_paused_at,
-                paused_total_seconds=ticket.sla_paused_total_seconds,
-                now=now,
-            )
-            ticket.sla_paused_at = None
-
         if target is TicketStatus.resolved:
             ticket.resolved_at = now
         elif ticket.status is TicketStatus.resolved and target is TicketStatus.in_progress:
@@ -612,20 +569,14 @@ async def create_comment(
         )
 
         if outcome == "follow_up":
-            policy = await get_policy(session, TicketPriority.normal)
             follow_up = Ticket(
                 subject=ticket.subject,
                 description=body.body,
-                status=TicketStatus.new,
+                status=TicketStatus.open,
                 priority=TicketPriority.normal,
                 requester_id=user.id,
                 parent_ticket_id=ticket.id,
                 created_at=now,
-            )
-            follow_up.sla_response_due, follow_up.sla_resolution_due = compute_due_dates(
-                now,
-                response_minutes=policy.response_minutes,
-                resolution_minutes=policy.resolution_minutes,
             )
             session.add(follow_up)
             await session.flush()
@@ -643,15 +594,7 @@ async def create_comment(
 
         if outcome == "reopen":
             before_status = ticket.status
-            if ticket.status is TicketStatus.pending:
-                ticket.sla_resolution_due, ticket.sla_paused_total_seconds = leave_pending(
-                    resolution_due=ticket.sla_resolution_due,
-                    paused_at=ticket.sla_paused_at,
-                    paused_total_seconds=ticket.sla_paused_total_seconds,
-                    now=now,
-                )
-                ticket.sla_paused_at = None
-            elif ticket.status is TicketStatus.resolved:
+            if ticket.status is TicketStatus.resolved:
                 ticket.resolved_at = None
             ticket.status = TicketStatus.in_progress
             await write_audit(
@@ -673,7 +616,7 @@ async def create_comment(
     session.add(comment)
 
     if not is_requester and not body.is_internal_note and ticket.first_responded_at is None:
-        ticket.first_responded_at = mark_first_response(None, now)
+        ticket.first_responded_at = now
 
     await session.commit()
     # Only server-generated columns: a full refresh would expire `author`.

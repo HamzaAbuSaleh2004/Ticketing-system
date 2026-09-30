@@ -33,9 +33,8 @@ test("seed a realistic queue", async () => {
     await triage(agent, id, { category, priority });
     ids.push(id);
   }
-  // A spread of states so the queue shows every SLA indicator state.
+  // A spread of statuses so the queue shows every status.
   await agent.patch(`/tickets/${ids[1]}`, { assignee_id: agent.id });
-  await agent.patch(`/tickets/${ids[1]}`, { status: "open" });
   await agent.patch(`/tickets/${ids[1]}`, { status: "in_progress" });
   await agent.post(`/tickets/${ids[1]}/comments`, { body: "Looking into the invoice now." });
   await agent.patch(`/tickets/${ids[1]}`, { status: "pending" });
@@ -79,24 +78,20 @@ test("agent walks a ticket through the full lifecycle in the UI, internal note s
   await expect(page.getByText(ref).first()).toBeVisible();
 
   const aside = page.getByRole("complementary", { name: "Ticket properties" });
-  // Manual triage: category and priority, then mark it triaged.
-  await expect(page.getByRole("combobox", { name: "Status" })).toHaveText(/New/);
+  // Manual triage: category and priority (it starts, and stays, open until assigned).
+  await expect(page.getByRole("combobox", { name: "Status" })).toHaveText(/Open/);
   await chooseField(page, "Category", /^Billing$/);
   await expect(page.getByRole("combobox", { name: "Category" })).toHaveText(/Billing/);
   await chooseField(page, "Priority", /High priority/);
   await expect(page.getByRole("combobox", { name: "Priority" })).toHaveText(/High priority/);
-  await chooseStatus(page, /Move to triaged/);
-  await expect(page.getByRole("combobox", { name: "Status" })).toHaveText(/Triaged/);
 
-  // Open needs an assignee: the option is guarded until someone takes it.
+  // In progress needs an assignee: the option is guarded until someone takes it.
   await page.getByRole("combobox", { name: "Status" }).click();
-  await expect(page.getByRole("option", { name: /Move to open/ })).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByRole("option", { name: /Move to in progress/ })).toHaveAttribute("aria-disabled", "true");
   await page.keyboard.press("Escape");
   await aside.getByRole("button", { name: "Take it" }).click();
   await expect(page.getByRole("combobox", { name: "Assignee" })).toHaveText(/Tara Tier1/);
 
-  await chooseStatus(page, /Move to open/);
-  await expect(page.getByRole("combobox", { name: "Status" })).toHaveText(/Open/);
   await chooseStatus(page, /Move to in progress/);
 
   // A public reply, then an internal note.
@@ -110,21 +105,20 @@ test("agent walks a ticket through the full lifecycle in the UI, internal note s
   await expect(note).toContainText("Internal note");
 
   await chooseStatus(page, /Move to pending/);
-  await expect(aside.getByText("Paused", { exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Status" })).toHaveText(/Pending/);
   await shot(page, "phase-8", "ticket-pending-1280");
   await page.setViewportSize({ width: 1600, height: 1000 });
   await shot(page, "phase-8", "ticket-pending-1600");
 
   await chooseStatus(page, /Move to in progress/);
   await chooseStatus(page, /Move to resolved/);
-  await expect(aside.getByText("No SLA running").or(aside.getByText("None"))).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Status" })).toHaveText(/Resolved/);
   await chooseStatus(page, /Move to closed/);
   await expect(page.getByRole("combobox", { name: "Status" })).toHaveText(/Closed/);
 
   // History has one entry per change, including the manual triage.
   await aside.getByRole("button", { name: /History/ }).click();
   await expect(aside.getByText("Category Billing")).toBeVisible();
-  await expect(aside.getByText("Status Triaged")).toBeVisible();
 
   // The customer never sees the internal note (API and UI).
   const asCustomer = await customer.get(`/tickets/${id}`);

@@ -6,8 +6,6 @@ from datetime import datetime, timedelta
 from app.models.enums import TicketPriority, TicketStatus
 
 ALLOWED_TRANSITIONS: dict[TicketStatus, set[TicketStatus]] = {
-    TicketStatus.new: {TicketStatus.triaged},
-    TicketStatus.triaged: {TicketStatus.open},
     TicketStatus.open: {TicketStatus.in_progress},
     TicketStatus.in_progress: {TicketStatus.pending, TicketStatus.resolved},
     TicketStatus.pending: {TicketStatus.in_progress},
@@ -25,7 +23,7 @@ _PRIORITY_ORDER = [
 
 class IllegalTransitionError(Exception):
     """A requested status change isn't a legal move from the current status,
-    or fails a transition guard (e.g. `open` needs an assignee)."""
+    or fails a transition guard (e.g. `in_progress` needs an assignee)."""
 
     def __init__(self, current: TicketStatus, allowed: set[TicketStatus], reason: str | None = None):
         self.current = current
@@ -44,8 +42,8 @@ def validate_transition(
     allowed = ALLOWED_TRANSITIONS[current]
     if target not in allowed:
         raise IllegalTransitionError(current, allowed)
-    if current is TicketStatus.triaged and target is TicketStatus.open and assignee_id is None:
-        raise IllegalTransitionError(current, allowed, reason="open requires an assignee")
+    if current is TicketStatus.open and target is TicketStatus.in_progress and assignee_id is None:
+        raise IllegalTransitionError(current, allowed, reason="in_progress requires an assignee")
 
 
 def can_escalate(status: TicketStatus) -> bool:

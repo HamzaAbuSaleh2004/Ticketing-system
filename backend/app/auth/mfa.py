@@ -2,8 +2,8 @@
 which is what Google/Microsoft Authenticator and 1Password expect).
 
 Codes are checked against real wall-clock time (not `domain.clock`, which
-tests freeze for SLA math), one step either side for clock drift, and a
-step is never accepted twice for the same user.
+tests freeze for lifecycle timing), one step either side for clock drift,
+and a step is never accepted twice for the same user.
 """
 
 import hashlib

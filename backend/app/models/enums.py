@@ -15,8 +15,6 @@ class Team(str, enum.Enum):
 
 
 class TicketStatus(str, enum.Enum):
-    new = "new"
-    triaged = "triaged"
     open = "open"
     in_progress = "in_progress"
     pending = "pending"

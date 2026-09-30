@@ -30,7 +30,7 @@ describe("replyMode (mirrors the backend's customer_reply_outcome)", () => {
 describe("customer-facing status copy", () => {
   it("says 'Waiting on you' for pending", () => {
     expect(CUSTOMER_STATUS.pending.label).toBe("Waiting on you");
-    expect(CUSTOMER_STATUS.new.line).toBe("We're reviewing this");
+    expect(CUSTOMER_STATUS.open.line).toBe("We're reviewing this");
   });
 });
 

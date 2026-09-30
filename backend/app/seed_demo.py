@@ -14,10 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain import clock
 from app.domain.audit import write_audit
-from app.domain.sla import compute_due_dates
 from app.models import (
     AuditLog,
-    SlaPolicy,
     Ticket,
     TicketActionItem,
     TicketComment,
@@ -67,7 +65,6 @@ async def seed_demo_tickets(session: AsyncSession, path: str) -> int:
     missing = emails - users.keys()
     if missing:
         raise ValueError(f"Demo data references unknown users: {sorted(missing)}")
-    policies = {p.priority: p for p in await session.scalars(select(SlaPolicy))}
 
     # One "now" for every relative offset in the file (README step 1).
     now = clock.now()
@@ -83,11 +80,6 @@ async def seed_demo_tickets(session: AsyncSession, path: str) -> int:
         created = ago(t["created_minutes_ago"])
         priority = TicketPriority(t["priority"])
         status = TicketStatus(t["status"])
-        policy = policies[priority]
-        # Step 2: due dates through domain/sla.py, not by hand.
-        response_due, resolution_due = compute_due_dates(
-            created, response_minutes=policy.response_minutes, resolution_minutes=policy.resolution_minutes
-        )
 
         ticket = Ticket(
             subject=t["subject"],
@@ -100,23 +92,11 @@ async def seed_demo_tickets(session: AsyncSession, path: str) -> int:
             # Inherited from the requester, exactly like a live POST /tickets.
             organization_id=users[t["requester_email"]].organization_id,
             created_at=created,
-            sla_response_due=response_due,
-            sla_resolution_due=resolution_due,
             escalated=bool(t.get("escalated")),
             parent_ticket_id=ids_by_ref[t["parent_ref"]] if t.get("parent_ref") else None,
             resolved_at=ago(t["resolved_minutes_ago"]) if "resolved_minutes_ago" in t else None,
             closed_at=ago(t["closed_minutes_ago"]) if "closed_minutes_ago" in t else None,
         )
-
-        # Step 3: pending_minutes is the current pause for pending tickets, and
-        # completed pause time (what leave_pending would have produced) otherwise.
-        if "pending_minutes" in t:
-            if status is TicketStatus.pending:
-                ticket.sla_paused_at = ago(t["pending_minutes"])
-                ticket.sla_paused_total_seconds = 0
-            else:
-                ticket.sla_paused_total_seconds = t["pending_minutes"] * 60
-                ticket.sla_resolution_due = resolution_due + timedelta(minutes=t["pending_minutes"])
 
         comments = sorted(t.get("comments", []), key=lambda c: c["minutes_ago"], reverse=True)
         # Step 4: the earliest public comment written by an agent.
@@ -125,7 +105,7 @@ async def seed_demo_tickets(session: AsyncSession, path: str) -> int:
         ]
         ticket.first_responded_at = ago(public_agent[0]["minutes_ago"]) if public_agent else None
 
-        events = [created, ticket.resolved_at, ticket.closed_at, ticket.sla_paused_at]
+        events = [created, ticket.resolved_at, ticket.closed_at]
         events += [ago(c["minutes_ago"]) for c in comments]
         ticket.updated_at = max(e for e in events if e is not None)
 

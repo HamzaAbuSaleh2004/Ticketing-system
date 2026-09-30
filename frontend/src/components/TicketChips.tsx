@@ -29,9 +29,7 @@ function Pill({ tone, children }: { tone: Tone; children: string }) {
 }
 
 const STATUS_TONE: Record<TicketStatus, Tone> = {
-  new: { bg: "surfaceContainerHighest", fg: "onSurface" },
-  triaged: { bg: "surfaceContainerHighest", fg: "onSurfaceVariant" },
-  open: { bg: "secondaryContainer", fg: "onSecondaryContainer" },
+  open: { bg: "surfaceContainerHighest", fg: "onSurface" },
   in_progress: { bg: "secondaryContainer", fg: "onSecondaryContainer" },
   pending: { bg: null, fg: "onSurfaceVariant", outline: true },
   resolved: { bg: null, fg: "primary", outline: true },

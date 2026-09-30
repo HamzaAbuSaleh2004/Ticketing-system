@@ -10,7 +10,6 @@ const ACTION: Record<string, string> = {
   "ticket.created_from_reply": "created this from a reply to a closed ticket",
   "ticket.updated": "updated",
   "ticket.reopened_by_reply": "reopened it by replying",
-  "ticket.auto_escalated": "escalated it because the SLA was at risk",
   "ticket.auto_closed": "closed it after the reopen window",
 };
 

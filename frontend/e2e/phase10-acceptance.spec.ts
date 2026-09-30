@@ -7,11 +7,11 @@ test("acceptance captures with demo data", async ({ page, browser }) => {
   await signIn(page, "agent1@ticketing.demo");
   const table = page.getByRole("table", { name: "Tickets" });
   await expect(table.getByRole("link", { name: "Charged for 14 seats but we only have 6 people" })).toBeVisible();
-  // Every SLA state is on screen with its text label.
-  await expect(table.getByText("Paused").first()).toBeVisible();
+  // Every status is on screen with its text label.
+  await expect(table.getByText("Pending").first()).toBeVisible();
   await shot(page, "phase-10", "queue-demo-1600");
 
-  // t11: escalated, breached, with internal notes.
+  // t11: escalated, with internal notes.
   await table.getByRole("link", { name: "Charged for 14 seats but we only have 6 people" }).click();
   await expect(page.getByText("Internal note").first()).toBeVisible();
   await shot(page, "phase-10", "ticket-demo-1600");

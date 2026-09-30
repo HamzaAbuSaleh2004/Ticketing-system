@@ -5,13 +5,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.lifecycle import escalate_priority
-from app.domain.sla import recompute_due_on_priority_change
-from app.models import SlaPolicy, Team, Ticket, User
+from app.models import Team, Ticket, User
 from app.models.enums import TicketPriority, TicketStatus, UserRole
 
 ACTIVE_STATUSES = [
-    TicketStatus.new,
-    TicketStatus.triaged,
     TicketStatus.open,
     TicketStatus.in_progress,
     TicketStatus.pending,
@@ -30,24 +27,8 @@ async def lock_ticket(session: AsyncSession, ticket_id: int) -> Ticket | None:
     )
 
 
-async def get_policy(session: AsyncSession, priority: TicketPriority) -> SlaPolicy:
-    policy = await session.scalar(select(SlaPolicy).where(SlaPolicy.priority == priority))
-    if policy is None:
-        raise RuntimeError(f"No SLA policy configured for priority {priority.value}")
-    return policy
-
-
-async def set_priority(session: AsyncSession, ticket: Ticket, priority: TicketPriority) -> None:
+def set_priority(ticket: Ticket, priority: TicketPriority) -> None:
     ticket.priority = priority
-    policy = await get_policy(session, priority)
-    ticket.sla_response_due, ticket.sla_resolution_due = recompute_due_on_priority_change(
-        created_at=ticket.created_at,
-        response_minutes=policy.response_minutes,
-        resolution_minutes=policy.resolution_minutes,
-        first_responded_at=ticket.first_responded_at,
-        paused_total_seconds=ticket.sla_paused_total_seconds,
-        current_response_due=ticket.sla_response_due,
-    )
 
 
 async def least_loaded_senior(session: AsyncSession) -> int | None:
@@ -76,7 +57,7 @@ async def escalate(session: AsyncSession, ticket: Ticket) -> tuple[dict, dict]:
         "escalated": ticket.escalated,
         "assignee_id": ticket.assignee_id,
     }
-    await set_priority(session, ticket, escalate_priority(ticket.priority))
+    set_priority(ticket, escalate_priority(ticket.priority))
     ticket.escalated = True
     senior_id = await least_loaded_senior(session)
     if senior_id is not None:

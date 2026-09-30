@@ -20,7 +20,6 @@ test("dashboard: tiles, charts with hover + keyboard + table view, range filter"
 
   const created = page.getByRole("region", { name: "Tickets created", exact: true });
   await expect(created).toContainText(summary.created.toLocaleString());
-  await expect(page.getByRole("region", { name: "SLA breaches" })).toContainText(`${summary.sla_breaches.response} first-reply`);
   await expect(page.getByRole("region", { name: "Backlog by status" })).toContainText("In progress");
   await shot(page, "phase-9", "dashboard-1600");
 
@@ -53,12 +52,9 @@ test("dashboard: tiles, charts with hover + keyboard + table view, range filter"
   await shot(page, "phase-9", "dashboard-dark-390");
 });
 
-test("admin: SLA policy, categories and team edits are saved and logged", async ({ page }) => {
+test("admin: categories and team edits are saved and logged", async ({ page }) => {
   const admin = await apiAs("admin@ticketing.demo");
-  const current = (await admin.get("/sla-policies")).find((p: { priority: string }) => p.priority === "low");
-  const newReply = current.response_minutes === 400 ? 420 : 400;
   const categoryName = `Returns ${Date.now() % 100000}`;
-  try {
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await signIn(page, "admin@ticketing.demo");
@@ -75,16 +71,6 @@ test("admin: SLA policy, categories and team edits are saved and logged", async 
   await page.getByRole("option", { name: "Tier 1" }).click();
   await expect(page.getByText("Tom Tier1 moved to Tier 1")).toBeVisible();
 
-  // SLA policies: the rule is stated; edit + save.
-  await page.getByRole("tab", { name: "SLA policies" }).click();
-  await expect(page.getByText("Changes apply to tickets created after you save.")).toBeVisible();
-  const lowReply = page.getByRole("spinbutton", { name: "First reply within (minutes) for Low" });
-  await lowReply.fill(String(newReply));
-  await page.getByRole("row", { name: /^Low/ }).getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("Low targets saved")).toBeVisible();
-  await shot(page, "phase-9", "admin-sla-1280");
-  await axe(page, "admin sla");
-
   // Categories: add, then deactivate.
   await page.getByRole("tab", { name: "Categories" }).click();
   await page.getByLabel("New category").fill(categoryName);
@@ -97,8 +83,6 @@ test("admin: SLA policy, categories and team edits are saved and logged", async 
   // All of it is in the change log.
   await page.getByRole("tab", { name: "Change log" }).click();
   const log = page.getByRole("table", { name: "Change log" });
-  await expect(log).toContainText("SLA policy Low");
-  await expect(log).toContainText(`First reply (min) ${current.response_minutes} to ${newReply}`);
   await expect(log).toContainText(`Category ${categoryName}`);
   await expect(log).toContainText("Active yes to no");
   await expect(log).toContainText("User Tom Tier1");
@@ -127,9 +111,4 @@ test("admin: SLA policy, categories and team edits are saved and logged", async 
   expect(relogin.mfa).toBe("enroll");
   await page.getByRole("tab", { name: "Change log" }).click();
   await expect(log).toContainText("Two-step verification reset");
-
-  } finally {
-    // Leave the dev data at the seeded targets (low: 8h / 72h).
-    await admin.patch("/sla-policies/low", { response_minutes: 480, resolution_minutes: 72 * 60 });
-  }
 });

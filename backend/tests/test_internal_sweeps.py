@@ -61,5 +61,5 @@ async def test_valid_token_from_the_right_caller_runs_the_sweeps(client, monkeyp
     resp = await client.post("/internal/sweeps", headers={"Authorization": "Bearer whatever"})
     assert resp.status_code == 200
     body = resp.json()
-    assert set(body) == {"sla-risk", "auto-close", "prune-login-attempts"}
+    assert set(body) == {"auto-close", "prune-login-attempts"}
     assert all(isinstance(v, list) for v in body.values())

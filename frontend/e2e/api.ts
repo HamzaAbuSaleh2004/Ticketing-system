@@ -41,7 +41,8 @@ export async function apiAs(email: string, password = SEED_PASSWORD): Promise<Ap
   };
 }
 
-/** Triage is manual: an agent sets category and priority, then marks it triaged. */
+/** Triage is manual: an agent sets category and priority. The ticket stays
+ * `open` (there's no separate "triaged" status) until someone takes it. */
 export async function triage(agent: ApiUser, id: number, fields: { category: string; priority: string }): Promise<any> {
-  return agent.patch(`/tickets/${id}`, { ...fields, status: "triaged" });
+  return agent.patch(`/tickets/${id}`, { ...fields });
 }

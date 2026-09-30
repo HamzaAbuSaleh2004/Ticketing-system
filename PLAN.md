@@ -8,11 +8,12 @@
 ---
 
 > **Scope changes from the user override the brief where they conflict (latest first):**
+> - **2026-09-30:** SLA tracking is removed from the product entirely (Phase 19) — no due dates, no pause/resume, no SLA-risk sweep, no SLA policy admin tab, no SLA metric on the dashboard. The ticket lifecycle collapses from 7 statuses to 5: `open` (the sole starting point — `new`/`triaged` fold into it), `in_progress`, `pending`, `resolved`, `closed`. A ticket can have multiple agents: one primary (`assignee_id`, unchanged — drives escalation/load-balancing/audit) plus any number of collaborators (Phase 20). The queue's keyboard shortcuts move from j/k to arrow keys, the ticket detail view drops its left ticket-list rail and is redesigned around the ticket itself rather than a chat thread, the reply composer submits on Enter, and attachments are viewable inline (Phases 20–22). The dashboard is simplified and the dark-theme toggle is removed, light only (Phase 23).
 > - **2026-09-29 (c):** Staff can create a ticket on behalf of a customer: an existing customer account, or (if the customer has no account yet) just tagged with the organisation, claimed later once they register (Phase 14). Admins can create a brand-new admin/agent account directly, not only promote an existing one (Phase 14) — so the first real admin can hand off to a second one.
 > - **2026-09-29 (b):** Deploy to Google Cloud (Phases 17–18; the brief's "no GCP deployment" non-goal no longer applies). LiverX branding replaces the Spruce seed (Phase 15). All buttons share one colour. Tickets carry the customer's organisation (company or government entity) and two action lists, one for the customer and one for LiverX. The first real admin is `habusaleh@liverx.me`.
 > - **2026-09-29 (a):** No AI anywhere, manual triage, no Redis or pgvector, mandatory TOTP 2FA for every account (Phase 11).
 >
-> Rows of §0 that these replace: *AI*, *Models*, *Queue*, the pgvector part of *DB*, and the Spruce seed in *Design direction*. Everything else in §0 stands.
+> Rows of §0 that these replace: *AI*, *Models*, *Queue*, the pgvector part of *DB*, the Spruce seed in *Design direction*, and (as of 2026-09-30) that table's agent-console *Signature element* row (the SLA ring is gone; see Phase 19). Everything else in §0 stands.
 
 ## 0. Decisions locked (do not re-litigate)
 
@@ -46,7 +47,7 @@
 | Surfaces | `surface` + `surfaceContainerLow`, mostly flat | Layered: `surfaceContainer` rail, `surfaceContainerHigh` detail pane, `surfaceContainerHighest` for the selected row |
 | Layout | Top app bar + one column: KB search on top, then "Your requests" as a **list** (not cards) | Nav rail + 3-pane: filter/queue list · ticket thread · properties/AI side panel |
 | Shape | Large (16–28px) corners, pill buttons | Pill buttons/chips stay; table and panes use small (8px) corners |
-| Signature element | **The KB answer panel**: a grounded answer with numbered source chips that link to the articles | **SLA ring/countdown** on every queue row, in tabular Roboto Flex. Pauses visibly (hatched/"paused" label) while `pending` |
+| Signature element | **The KB answer panel**: a grounded answer with numbered source chips that link to the articles | **The dual action-item checklists** (Phase 12): what's needed from the customer vs. from LiverX, with a "Waiting on" indicator per queue row — replaces the SLA ring (removed 2026-09-30, Phase 19) |
 
 **Banned:**
 - Drop shadows for elevation (use tonal surfaces), purple gradients, a centered hero with an illustration, a card grid of everything, Inter/system-ui, default MUI blue.
@@ -749,12 +750,38 @@ Each phase ends with **Verify**: commands the executor must actually run, with t
 
 ### Phase 18 — Go-live acceptance on Google Cloud
 - [ ] `habusaleh@liverx.me` signs in on the live URL and enrols 2FA, then creates one agent (a real `@liverx.me` colleague, with the user's consent) and one test customer in a test organisation.
-- [ ] Walk the flow on the live site: the customer registers (or is created) with 2FA → submits a ticket with an attachment → the agent sets organisation/category/priority, triages, assigns, adds action items on both sides → the customer ticks theirs and replies → pending pauses the SLA → resolved → closed. Screenshot each step into `docs/screenshots/phase-17/`.
-- [ ] Check the SLA sweep escalates an at-risk urgent test ticket within about 2 minutes (the Scheduler logs plus the ticket's history).
+- [ ] Walk the flow on the live site: the customer registers (or is created) with 2FA → submits a ticket with an attachment → the agent sets organisation/category/priority, assigns, adds action items on both sides → the customer ticks theirs and replies → in progress → pending → in progress → resolved → closed. Screenshot each step into `docs/screenshots/phase-17/`.
+- [ ] Check a manual escalation (`PATCH {"escalate": true}` or the UI button) bumps priority and reassigns to the senior team (the Scheduler logs plus the ticket's history — the auto-close sweep, not an SLA sweep, is what runs on schedule now).
 - [ ] Restore test: create a backup on demand, restore it to a **new temporary** instance, check the row counts, delete the temporary instance. Record the steps in `deploy/README.md` as the runbook.
 - [ ] Clean up: delete the test tickets/users if the user wants; confirm no demo accounts exist in prod (`/users` lists only real people).
 - [ ] Final hand-over note for the user: the live URL, how to add staff and organisations, how to reset someone's 2FA, how to redeploy (`deploy/deploy.sh`), the monthly cost, and where logs and backups are.
 - **Verify:** every step above has evidence; anything not observed is marked as not verified.
+
+### Phase 19 — Remove SLA; collapse ticket statuses to 5
+**Needs the user; already discussed:** see the 2026-09-30 scope-change note above for the decisions this phase implements. No GCP work; this is entirely local.
+- [x] **Backend:** deleted `domain/sla.py`, `models/sla_policy.py`, the `sla_risk_sweep` (+ its window/risk helpers, kept `auto_close_sweep`/`prune_login_attempts`), the admin SLA-policy CRUD (`routers/admin.py`), and the `sla-risk` worker registration. Collapsed `TicketStatus` from 7 values to 5 (`open`, `in_progress`, `pending`, `resolved`, `closed`); `open` is the sole entry point (`new`/`triaged` folded in), the `in_progress` guard now requires an assignee (moved from the old `triaged→open` guard). Dropped the four `sla_*` ticket columns and the `sla_policies` table via a **new** Alembic revision (`f2a6d4b8c913`, not an edit to the already-applied initial migration — Phase 17 ran it against live Cloud SQL), with a data remap (`new`/`triaged` → `open`) before narrowing the Postgres enum.
+- [x] **Seed/demo data:** `seed.py`/`seed_reference.py` no longer seed SLA policies; `seed_demo.py` no longer computes due dates or `pending_minutes` pause state. `docs/demo-data/tickets.json` remapped (6 tickets: 3 `new`→`open`, 3 `triaged`→`open`; 4 `pending_minutes` fields dropped); `README.md` and `check-tickets.mjs` rewritten for the 5-status, no-SLA contract — `node check-tickets.mjs tickets.json` passes.
+- [x] **Frontend (forced by the backend type change, not deferred):** deleted `lib/sla.ts`, `components/SlaIndicator.tsx`, the now-dead `lib/useNow.ts`, and the admin SLA-policy tab (`AdminPage.tsx`). Moved `formatDuration` to `lib/tickets.ts` (the dashboard still needs it for non-SLA duration formatting). Updated every status-keyed map to the 5-value set (`STATUS_LABEL`, `CUSTOMER_STATUS` — `open`'s customer label corrected from "In progress" to "Received", since `open` is now the brand-new/untriaged state — `STATUS_TONE`, the customer `TONE` map, `statusOptions`' assignee guard, `QueueToolbar`'s `STATUSES`, `queueParams`'s `ACTIVE_STATUSES`/default sort). Removed the SLA column from `QueueTable.tsx`, the SLA block from `TicketSidePanel.tsx`, and the "SLA breaches" tile from `DashboardPage.tsx`. `RequestPage.tsx`'s "just received" banner now keys off `category === null` (the untriaged signal) instead of the deleted `new` status.
+- [x] **Tests:** backend — rewrote `test_domain_lifecycle.py`, `test_tickets.py`, `test_sweeps.py` (kept the skip-locked coverage, now against `auto_close_sweep`), `test_analytics_admin.py`, `test_seed_demo.py`, `test_internal_sweeps.py`, `test_organizations.py`, `test_attachments.py`, `helpers.py` for the 5-status/no-SLA world; deleted `test_domain_sla.py`. Frontend — rewrote `agent.test.ts` (was actually testing `lib/sla.ts`), fixed `enduser.test.ts`. E2e — updated `phase8-agent.spec.ts`, `phase9-dashboard-admin.spec.ts`, `phase10-acceptance.spec.ts`, and the shared `api.ts` `triage()` helper (no longer patches a nonexistent `triaged` status) for the new lifecycle; not run in this phase (needs a full Playwright pass, planned for later).
+- [x] `code-review --high` run on the full diff twice (before and after the forced frontend fix-up); both rounds' findings fixed, second round found nothing.
+- **Verify:**
+  - `docker compose down -v && docker compose up -d --build`: all 4 services healthy; API log shows the new migration (`a0187af77fe7 -> f2a6d4b8c913`) then `seed: added 25 demo tickets` then `seed: complete`.
+  - `docker compose exec api python -m pytest -q` → **162 passed** (run twice: once on the pre-existing dev DB, once fresh).
+  - `docker compose exec frontend npx tsc --noEmit` → clean. `npx vitest run` → **22 passed**. `npm run build` → succeeds.
+  - Live API walk (fresh ticket via `/tickets`): `open` (no assignee) → `in_progress` rejected 409 with `{"error": "in_progress requires an assignee", "allowed": ["in_progress"]}` → assign → `in_progress` → `pending` → `in_progress` → `resolved` → `closed`, `allowed_transitions` correct at every step. `GET /tickets` rows and `GET /analytics/summary` carry no `sla_*`/`sla_breaches` fields; `POST /internal/sweeps` (401 unauthenticated, as before) no longer lists `sla-risk`.
+  - Screenshots (queue, a ticket detail, dashboard, admin) taken against the running stack: no visual gaps, orphaned dividers, or empty rows where SLA UI used to be; no browser console/page errors on either an agent or admin session.
+
+### Phase 20 — Multiple agents per ticket (primary + collaborators)
+- [ ] See the plan file for the design (primary `assignee_id` unchanged; new `ticket_collaborators` join table; collaborator endpoints; queue/side-panel UI).
+
+### Phase 21 — Queue page fixes
+- [ ] Arrow keys replace j/k; header spacing fixed; assignee filter no longer double-lists the current user; SLA-era default sort already gone (Phase 19) — confirm the new default reads well.
+
+### Phase 22 — Ticket detail redesign, composer, inline attachments
+- [ ] Remove the left ticket-list rail; make the ticket's subject/description a distinct field, not the thread's first "message"; group the properties panel; Enter-to-send composer with a taller cap and the button beside the field; inline image/PDF viewing.
+
+### Phase 23 — Dashboard simplification + remove dark theme
+- [ ] Add a "tickets by priority" tile; remove the "Match system"/"Dark" options from `ThemeMenu` everywhere it's rendered; hardcode light mode in `ThemeController`.
 
 ---
 

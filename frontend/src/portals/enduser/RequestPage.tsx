@@ -65,9 +65,10 @@ function authorLabel(c: Comment, myId: number | undefined) {
   return c.author_role === "end_user" ? c.author_name : `${c.author_name.split(" ")[0]} from Support`;
 }
 
-/** Until an agent has triaged it: what happens next, since nothing is automatic. */
+/** Until an agent has triaged it (given it a category): what happens next,
+ * since nothing is automatic. */
 function ReceivedNotice({ ticket }: { ticket: TicketDetailPublic }) {
-  if (ticket.status !== "new") return null;
+  if (ticket.category !== null) return null;
   return (
     <Box
       role="status"
@@ -195,7 +196,7 @@ export function RequestPage() {
   }
 
   const category = categoryName(ticket.category);
-  const triaged = ticket.status !== "new";
+  const triaged = ticket.category !== null;
 
   return (
     <Box sx={{ pt: { xs: 2, sm: 4 } }}>

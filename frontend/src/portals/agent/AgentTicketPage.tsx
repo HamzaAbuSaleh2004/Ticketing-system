@@ -6,7 +6,6 @@ import { errorMessage } from "../../api/client";
 import { useAgentTicket, usePatchTicket, useQueue } from "../../api/hooks";
 import type { TicketPatch } from "../../api/types";
 import { OrganizationKindChip, PriorityChip, StatusChip } from "../../components/TicketChips";
-import { SlaIndicator } from "../../components/SlaIndicator";
 import { absoluteTime, ticketRef } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
 import { Composer, AgentThread } from "./AgentThread";
@@ -58,7 +57,6 @@ function QueuePane({ currentId, search, keysEnabled }: { currentId: number; sear
                 <Typography variant="labelMedium" className="tabular" sx={{ color: sys("onSurfaceVariant") }}>
                   {ticketRef(t.id)}
                 </Typography>
-                <SlaIndicator ticket={t} />
                 <Typography variant="bodyMedium" sx={{ gridColumn: "1 / -1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: current ? 500 : 400 }}>
                   {t.subject}
                 </Typography>

@@ -13,7 +13,6 @@ from app.models.enums import (
 from app.models.kb_article import KnowledgeBaseArticle
 from app.models.login_attempt import LoginAttempt
 from app.models.organization import Organization
-from app.models.sla_policy import SlaPolicy
 from app.models.ticket import Ticket
 from app.models.ticket_action_item import TicketActionItem
 from app.models.user import User
@@ -27,7 +26,6 @@ __all__ = [
     "LoginAttempt",
     "Organization",
     "OrganizationKind",
-    "SlaPolicy",
     "Team",
     "Ticket",
     "TicketActionItem",

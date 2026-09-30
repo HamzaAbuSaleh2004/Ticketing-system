@@ -1,31 +1,13 @@
 from datetime import UTC, datetime, timedelta
 
-import pytest_asyncio
 from sqlalchemy import func, select
 
 from app.domain import clock
-from app.models import AuditLog, SlaPolicy, User
-from app.models.enums import Team, TicketPriority
+from app.models import AuditLog, User
+from app.models.enums import Team
 from tests.helpers import create_agent, login, register_full
 
 BASE = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
-
-# Ticket creation looks up an sla_policies row by priority; the test DB is
-# migrated but never seeded (that's app/seed.py's job for the dev stack), so
-# these tests need their own minimal policy set.
-_SLA_POLICIES = [
-    {"name": "Urgent", "priority": TicketPriority.urgent, "response_minutes": 15, "resolution_minutes": 4 * 60},
-    {"name": "High", "priority": TicketPriority.high, "response_minutes": 60, "resolution_minutes": 8 * 60},
-    {"name": "Normal", "priority": TicketPriority.normal, "response_minutes": 4 * 60, "resolution_minutes": 24 * 60},
-    {"name": "Low", "priority": TicketPriority.low, "response_minutes": 8 * 60, "resolution_minutes": 72 * 60},
-]
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def _sla_policies(db_session):
-    for p in _SLA_POLICIES:
-        db_session.add(SlaPolicy(**p))
-    await db_session.commit()
 
 
 def _freeze(monkeypatch, when: datetime) -> None:
@@ -58,7 +40,7 @@ async def _audit_count(db_session, ticket_id: int) -> int:
     return result or 0
 
 
-async def test_full_lifecycle_walk_sla_pause_and_follow_up(client, db_session, monkeypatch):
+async def test_full_lifecycle_walk_and_follow_up(client, db_session, monkeypatch):
     _freeze(monkeypatch, BASE)
 
     customer_token, _ = await _register(client, "customer@example.com")
@@ -73,27 +55,19 @@ async def test_full_lifecycle_walk_sla_pause_and_follow_up(client, db_session, m
     assert create_resp.status_code == 201
     ticket = create_resp.json()
     ticket_id = ticket["id"]
-    assert ticket["status"] == "new"
+    assert ticket["status"] == "open"
     assert ticket["priority"] == "normal"
-    original_resolution_due = datetime.fromisoformat(ticket["sla_resolution_due"])
 
     audit_count = await _audit_count(db_session, ticket_id)
     assert audit_count == 1  # ticket.created
 
-    # new -> triaged
-    resp = await client.patch(f"/tickets/{ticket_id}", json={"status": "triaged"}, headers=_auth(agent_token))
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "triaged"
-    audit_count += 1
-    assert await _audit_count(db_session, ticket_id) == audit_count
-
-    # triaged -> open with no assignee is rejected, with the allowed set in the body
-    resp = await client.patch(f"/tickets/{ticket_id}", json={"status": "open"}, headers=_auth(agent_token))
+    # open -> in_progress with no assignee is rejected, with the allowed set in the body
+    resp = await client.patch(f"/tickets/{ticket_id}", json={"status": "in_progress"}, headers=_auth(agent_token))
     assert resp.status_code == 409
-    assert resp.json()["detail"]["allowed"] == ["open"]
+    assert resp.json()["detail"]["allowed"] == ["in_progress"]
     assert await _audit_count(db_session, ticket_id) == audit_count  # rejected, no new row
 
-    # assign, then open succeeds
+    # assign, then in_progress succeeds
     resp = await client.patch(
         f"/tickets/{ticket_id}", json={"assignee_id": agent.id}, headers=_auth(agent_token)
     )
@@ -101,12 +75,6 @@ async def test_full_lifecycle_walk_sla_pause_and_follow_up(client, db_session, m
     audit_count += 1
     assert await _audit_count(db_session, ticket_id) == audit_count
 
-    resp = await client.patch(f"/tickets/{ticket_id}", json={"status": "open"}, headers=_auth(agent_token))
-    assert resp.status_code == 200
-    audit_count += 1
-    assert await _audit_count(db_session, ticket_id) == audit_count
-
-    # open -> in_progress
     resp = await client.patch(f"/tickets/{ticket_id}", json={"status": "in_progress"}, headers=_auth(agent_token))
     assert resp.status_code == 200
     audit_count += 1
@@ -122,24 +90,19 @@ async def test_full_lifecycle_walk_sla_pause_and_follow_up(client, db_session, m
     detail = (await client.get(f"/tickets/{ticket_id}", headers=_auth(agent_token))).json()
     assert detail["first_responded_at"] is not None
 
-    # in_progress -> pending pauses the resolution SLA
+    # in_progress -> pending
     resp = await client.patch(f"/tickets/{ticket_id}", json={"status": "pending"}, headers=_auth(agent_token))
     assert resp.status_code == 200
     audit_count += 1
     assert await _audit_count(db_session, ticket_id) == audit_count
-    assert resp.json()["sla_paused_at"] is not None
 
-    # 2 hours later, pending -> in_progress: resolution due shifts by exactly the pause duration
+    # 2 hours later, pending -> in_progress
     resumed_at = BASE + timedelta(hours=2)
     _freeze(monkeypatch, resumed_at)
     resp = await client.patch(f"/tickets/{ticket_id}", json={"status": "in_progress"}, headers=_auth(agent_token))
     assert resp.status_code == 200
     audit_count += 1
     assert await _audit_count(db_session, ticket_id) == audit_count
-    detail = resp.json()
-    assert detail["sla_paused_at"] is None
-    assert datetime.fromisoformat(detail["sla_resolution_due"]) == original_resolution_due + timedelta(hours=2)
-    assert detail["sla_paused_total_seconds"] == int(timedelta(hours=2).total_seconds())
 
     # in_progress -> resolved
     resp = await client.patch(f"/tickets/{ticket_id}", json={"status": "resolved"}, headers=_auth(agent_token))
@@ -197,7 +160,7 @@ async def test_full_lifecycle_walk_sla_pause_and_follow_up(client, db_session, m
 
     follow_up = (await client.get(f"/tickets/{follow_up_id}", headers=_auth(agent_token))).json()
     assert follow_up["parent_ticket_id"] == ticket_id
-    assert follow_up["status"] == "new"
+    assert follow_up["status"] == "open"
     assert follow_up["description"] == "New, unrelated problem"
 
 
@@ -247,7 +210,7 @@ async def test_end_user_never_receives_internal_notes(client, db_session):
 
     as_customer = (await client.get(f"/tickets/{ticket_id}", headers=_auth(customer_token))).json()
     assert as_customer["comments"] == []
-    for agent_only in ("audit_log", "sla_paused_total_seconds", "allowed_transitions"):
+    for agent_only in ("audit_log", "allowed_transitions"):
         assert agent_only not in as_customer
 
     as_agent = (await client.get(f"/tickets/{ticket_id}", headers=_auth(agent_token))).json()
@@ -290,7 +253,7 @@ async def test_cannot_escalate_a_closed_ticket(client, db_session, monkeypatch):
     )
     ticket_id = create_resp.json()["id"]
 
-    for target in ("triaged", None, "open", "in_progress", "resolved", "closed"):
+    for target in (None, "in_progress", "resolved", "closed"):
         if target is None:
             await client.patch(f"/tickets/{ticket_id}", json={"assignee_id": agent.id}, headers=_auth(agent_token))
             continue
@@ -343,33 +306,31 @@ async def test_customers_see_staff_first_names_and_reopen_window(client, db_sess
     assert as_agent["comments"][0]["author_name"] == "Tara Tier1"
     assert as_customer["reopen_until"] is None
 
-    for patch in ({"status": "triaged"}, {"assignee_id": agent.id}, {"status": "open"}, {"status": "in_progress"}, {"status": "resolved"}):
+    for patch in ({"assignee_id": agent.id}, {"status": "in_progress"}, {"status": "resolved"}):
         assert (await client.patch(f"/tickets/{tid}", json=patch, headers=_auth(agent_token))).status_code == 200
     resolved = (await client.get(f"/tickets/{tid}", headers=_auth(customer_token))).json()
     assert datetime.fromisoformat(resolved["reopen_until"]) == BASE + timedelta(hours=72)
 
 
-async def test_agent_queue_rows_carry_names_and_clock_inputs_end_users_dont(client, db_session, monkeypatch):
+async def test_agent_queue_rows_carry_names_end_users_dont(client, db_session, monkeypatch):
     _freeze(monkeypatch, BASE)
     customer_token, _ = await _register(client, "queue-customer@example.com", name="Quinn Customer")
     agent = await _create_agent(db_session, email="queue-agent@example.com")
     agent_token = await _login(client, "queue-agent@example.com", "Secret123!")
     first = (await client.post("/tickets", json={"subject": "a", "description": "d"}, headers=_auth(customer_token))).json()["id"]
     second = (await client.post("/tickets", json={"subject": "b", "description": "d"}, headers=_auth(customer_token))).json()["id"]
-    for patch in ({"status": "triaged"}, {"assignee_id": agent.id}, {"status": "open"}, {"status": "in_progress"}):
+    for patch in ({"assignee_id": agent.id}, {"status": "in_progress"}):
         await client.patch(f"/tickets/{first}", json=patch, headers=_auth(agent_token))
     await client.patch(f"/tickets/{second}", json={"priority": "urgent"}, headers=_auth(agent_token))
 
-    queue = (await client.get("/tickets?status=in_progress&status=new&sort=sla_due", headers=_auth(agent_token))).json()
+    queue = (await client.get("/tickets?status=in_progress&status=open", headers=_auth(agent_token))).json()
     rows = {r["id"]: r for r in queue["items"]}
     assert set(rows) == {first, second}
-    assert queue["items"][0]["id"] == second  # urgent: its 15-minute response clock comes first
     assert rows[first]["requester_name"] == "Quinn Customer"
     assert rows[first]["assignee_name"] == "Agent"
-    assert rows[first]["sla_paused_total_seconds"] == 0
 
     mine = (await client.get("/tickets", headers=_auth(customer_token))).json()["items"]
-    assert {"requester_name", "assignee_name", "sla_paused_total_seconds"}.isdisjoint(mine[0])
+    assert {"requester_name", "assignee_name"}.isdisjoint(mine[0])
 
     detail = (await client.get(f"/tickets/{first}", headers=_auth(agent_token))).json()
     assert (detail["requester_name"], detail["requester_email"], detail["assignee_name"]) == (
@@ -380,30 +341,3 @@ async def test_agent_queue_rows_carry_names_and_clock_inputs_end_users_dont(clie
     staff = (await client.get("/users/staff", headers=_auth(agent_token))).json()
     assert [s["email"] for s in staff] == ["queue-agent@example.com"]
     assert (await client.get("/users/staff", headers=_auth(customer_token))).status_code == 403
-
-
-async def test_sla_due_sort_puts_long_paused_tickets_after_running_urgent_ones(client, db_session, monkeypatch):
-    from app.models import Ticket
-
-    customer_token, _ = await _register(client, "sort-customer@example.com")
-    agent = await _create_agent(db_session, email="sort-agent@example.com")
-    agent_token = await _login(client, "sort-agent@example.com", "Secret123!")
-    now = datetime.now(UTC)
-    requester_id = (await client.get("/auth/me", headers=_auth(customer_token))).json()["id"]
-    # Paused for 3 days: its stored due date is long past, but nobody can act on it.
-    paused = Ticket(
-        subject="waiting on customer", description="d", status="pending", priority="normal",
-        requester_id=requester_id, assignee_id=agent.id, created_at=now - timedelta(days=4),
-        sla_response_due=now - timedelta(days=4) + timedelta(hours=4), first_responded_at=now - timedelta(days=4),
-        sla_resolution_due=now - timedelta(days=2), sla_paused_at=now - timedelta(days=3),
-    )
-    running = Ticket(
-        subject="urgent and running", description="d", status="in_progress", priority="urgent",
-        requester_id=requester_id, assignee_id=agent.id, created_at=now - timedelta(minutes=5),
-        sla_response_due=now + timedelta(minutes=10), sla_resolution_due=now + timedelta(hours=4),
-    )
-    db_session.add_all([paused, running])
-    await db_session.commit()
-
-    queue = (await client.get("/tickets?sort=sla_due", headers=_auth(agent_token))).json()["items"]
-    assert [t["subject"] for t in queue] == ["urgent and running", "waiting on customer"]

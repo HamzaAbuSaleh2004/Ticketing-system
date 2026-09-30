@@ -12,8 +12,8 @@ async def write_audit(
     action: str,
     diff: dict | None = None,
 ) -> None:
-    """actor_id=None means the system (AI triage, SLA sweep) — never a
-    system user row."""
+    """actor_id=None means the system (a worker sweep, the demo seeder) —
+    never a system user row."""
     session.add(
         AuditLog(
             entity_type=entity_type,

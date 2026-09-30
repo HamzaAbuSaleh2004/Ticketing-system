@@ -10,7 +10,7 @@ import { sys } from "../../theme/scheme";
 import { FilterChip } from "./FilterChip";
 import type { QueueFilters, StatusFilter } from "./queueParams";
 
-const STATUSES: TicketStatus[] = ["new", "triaged", "open", "in_progress", "pending", "resolved", "closed"];
+const STATUSES: TicketStatus[] = ["open", "in_progress", "pending", "resolved", "closed"];
 const PRIORITIES: TicketPriority[] = ["urgent", "high", "normal", "low"];
 
 export function QueueToolbar({

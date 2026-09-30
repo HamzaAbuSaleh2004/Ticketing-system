@@ -1,6 +1,6 @@
 import type { TicketPriority, TicketStatus } from "../../api/types";
 
-export const ACTIVE_STATUSES: TicketStatus[] = ["new", "triaged", "open", "in_progress", "pending"];
+export const ACTIVE_STATUSES: TicketStatus[] = ["open", "in_progress", "pending"];
 export const PAGE_SIZE = 50;
 
 export type StatusFilter = "active" | "all" | TicketStatus;
@@ -50,8 +50,7 @@ export function apiQuery(f: QueueFilters): string {
   if (f.category) p.set("category", f.category);
   if (f.organization) p.set("organization", f.organization);
   if (f.q) p.set("q", f.q);
-  // Active work sorts by the next deadline; history by most recent change.
-  p.set("sort", f.status === "resolved" || f.status === "closed" || f.status === "all" ? "-updated_at" : "sla_due");
+  p.set("sort", "-updated_at");
   p.set("page", String(f.page));
   p.set("page_size", String(PAGE_SIZE));
   return p.toString();

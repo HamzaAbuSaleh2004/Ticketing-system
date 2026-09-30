@@ -112,7 +112,7 @@ class AttachmentOut(BaseModel):
 class AuditLogOut(BaseModel):
     id: int
     actor_id: int | None
-    # None for the system (the SLA sweeps): actor_id is NULL.
+    # None for the system (a worker sweep, e.g. auto-close): actor_id is NULL.
     actor_name: str | None = None
     action: str
     diff_json: dict | None
@@ -130,8 +130,6 @@ class TicketListItem(BaseModel):
     requester_id: int | None
     assignee_id: int | None
     escalated: bool
-    sla_response_due: datetime | None
-    sla_resolution_due: datetime | None
     created_at: datetime
     updated_at: datetime
     organization_id: int | None
@@ -151,15 +149,12 @@ class TicketListResponse(BaseModel):
 
 
 class TicketQueueItem(TicketListItem):
-    """Agent queue row: adds who's involved and the SLA clock inputs (pause
-    accounting is agent-only, like on the detail)."""
+    """Agent queue row: adds who's involved."""
 
     # None for an unclaimed ticket (no requester yet).
     requester_name: str | None
     assignee_name: str | None
-    sla_paused_at: datetime | None
     first_responded_at: datetime | None
-    sla_paused_total_seconds: int
 
 
 class TicketQueueResponse(BaseModel):
@@ -170,11 +165,10 @@ class TicketQueueResponse(BaseModel):
 
 
 class TicketDetailPublic(TicketListItem):
-    """What an end user gets. Agent-only fields (pause accounting, legal
-    transitions, audit trail) are absent from the model, not just nulled."""
+    """What an end user gets. Agent-only fields (legal transitions, audit
+    trail) are absent from the model, not just nulled."""
 
     description: str
-    sla_paused_at: datetime | None
     first_responded_at: datetime | None
     parent_ticket_id: int | None
     resolved_at: datetime | None
@@ -191,7 +185,6 @@ class TicketDetail(TicketDetailPublic):
     """Agent/admin view. The extra fields have no defaults, so a public
     payload can never validate as this model."""
 
-    sla_paused_total_seconds: int
     # Both None for an unclaimed ticket (no requester yet).
     requester_name: str | None
     requester_email: str | None

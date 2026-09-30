@@ -107,7 +107,6 @@
       "priority": "low",
       "category": "data-privacy",
       "created_minutes_ago": 3000,
-      "pending_minutes": 1200,
       "ai_summary": "Procurement asking for the subprocessor list and data locations.",
       "comments": [
         {
@@ -264,7 +263,6 @@
       "priority": "normal",
       "category": "technical-issue",
       "created_minutes_ago": 1400,
-      "pending_minutes": 300,
       "ai_summary": "Report builder errors when a created-date filter is added (RB-5521-A).",
       "comments": [
         {
@@ -339,7 +337,6 @@
       "priority": "normal",
       "category": "billing",
       "created_minutes_ago": 600,
-      "pending_minutes": 180,
       "ai_summary": "Invoice after a move to the Netherlands has no VAT line; needs reissue.",
       "comments": [
         {
@@ -457,7 +454,6 @@
       "priority": "high",
       "category": "account-login",
       "created_minutes_ago": 240,
-      "pending_minutes": 150,
       "ai_summary": "Authenticator codes rejected after moving the app to a new phone.",
       "comments": [
         {
@@ -486,7 +482,7 @@
       "description": "Exporting our Monthly activity report to CSV spins for about a minute and then says \"Export failed\". Smaller reports export fine. This one has roughly 80,000 rows. We need the file for an audit next week.",
       "requester_email": "user2@ticketing.demo",
       "assignee_email": null,
-      "status": "triaged",
+      "status": "open",
       "priority": "normal",
       "category": "technical-issue",
       "created_minutes_ago": 200,
@@ -559,7 +555,7 @@
       "description": "I made a second account (uma.test@) when we were trialling the product last year. I don't need it any more. Please delete it and everything in it. My main account should stay as it is.",
       "requester_email": "user1@ticketing.demo",
       "assignee_email": null,
-      "status": "triaged",
+      "status": "open",
       "priority": "low",
       "category": "data-privacy",
       "created_minutes_ago": 90,
@@ -620,7 +616,7 @@
       "description": "We got an email that our payment failed and now the workspace is in read-only mode. Our card was replaced by the bank last week, which is probably why. I've tried to add the new card but the Billing tab is read-only too. We can't create tickets for our own customers.",
       "requester_email": "user2@ticketing.demo",
       "assignee_email": null,
-      "status": "triaged",
+      "status": "open",
       "priority": "high",
       "category": "billing",
       "created_minutes_ago": 20,
@@ -640,7 +636,7 @@
       "description": "I got a new phone and didn't move my authenticator app first. I can't sign in without the code, and I can't find my backup codes. I'm the only admin on our account.",
       "requester_email": "user2@ticketing.demo",
       "assignee_email": null,
-      "status": "new",
+      "status": "open",
       "priority": "normal",
       "category": null,
       "created_minutes_ago": 14,
@@ -652,7 +648,7 @@
       "description": "My card shows two charges of $49.00 from you a day apart, but there's only one invoice in the Billing tab. Nobody else on my account has access to billing. Please refund the duplicate.",
       "requester_email": "user1@ticketing.demo",
       "assignee_email": null,
-      "status": "new",
+      "status": "open",
       "priority": "normal",
       "category": null,
       "created_minutes_ago": 6,
@@ -664,7 +660,7 @@
       "description": "We rebranded and I'd like the workspace name and the web address to match the new name. Is that something I can do myself, and will old links stop working?",
       "requester_email": "user1@ticketing.demo",
       "assignee_email": null,
-      "status": "new",
+      "status": "open",
       "priority": "normal",
       "category": null,
       "created_minutes_ago": 3,

@@ -18,8 +18,6 @@ NOW = datetime(2026, 1, 1, tzinfo=UTC)
 @pytest.mark.parametrize(
     ("current", "target"),
     [
-        (TicketStatus.new, TicketStatus.triaged),
-        (TicketStatus.triaged, TicketStatus.open),
         (TicketStatus.open, TicketStatus.in_progress),
         (TicketStatus.in_progress, TicketStatus.pending),
         (TicketStatus.in_progress, TicketStatus.resolved),
@@ -35,16 +33,13 @@ def test_legal_transitions_pass(current, target):
 @pytest.mark.parametrize(
     ("current", "target"),
     [
-        (TicketStatus.new, TicketStatus.open),
-        (TicketStatus.new, TicketStatus.in_progress),
-        (TicketStatus.triaged, TicketStatus.in_progress),
         (TicketStatus.open, TicketStatus.pending),
         (TicketStatus.open, TicketStatus.resolved),
         (TicketStatus.pending, TicketStatus.resolved),
         (TicketStatus.pending, TicketStatus.closed),
         (TicketStatus.closed, TicketStatus.in_progress),
         (TicketStatus.closed, TicketStatus.open),
-        (TicketStatus.resolved, TicketStatus.new),
+        (TicketStatus.resolved, TicketStatus.open),
     ],
 )
 def test_illegal_transitions_raise_with_allowed_set(current, target):
@@ -57,10 +52,10 @@ def test_closed_has_no_allowed_transitions():
     assert allowed_next_statuses(TicketStatus.closed) == set()
 
 
-def test_open_requires_assignee():
+def test_in_progress_requires_assignee():
     with pytest.raises(IllegalTransitionError):
-        validate_transition(TicketStatus.triaged, TicketStatus.open, assignee_id=None)
-    validate_transition(TicketStatus.triaged, TicketStatus.open, assignee_id=7)
+        validate_transition(TicketStatus.open, TicketStatus.in_progress, assignee_id=None)
+    validate_transition(TicketStatus.open, TicketStatus.in_progress, assignee_id=7)
 
 
 @pytest.mark.parametrize(
@@ -79,8 +74,6 @@ def test_escalate_priority_bumps_one_level_capped_at_urgent(priority, expected):
 @pytest.mark.parametrize(
     "status",
     [
-        TicketStatus.new,
-        TicketStatus.triaged,
         TicketStatus.open,
         TicketStatus.in_progress,
         TicketStatus.pending,
@@ -123,7 +116,7 @@ def test_customer_reply_on_closed_creates_follow_up():
 
 @pytest.mark.parametrize(
     "status",
-    [TicketStatus.new, TicketStatus.triaged, TicketStatus.open, TicketStatus.in_progress],
+    [TicketStatus.open, TicketStatus.in_progress],
 )
 def test_customer_reply_elsewhere_has_no_automatic_effect(status):
     assert customer_reply_outcome(

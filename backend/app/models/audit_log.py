@@ -18,7 +18,7 @@ class AuditLog(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    # Nullable: automated actions (e.g. the SLA-risk sweep) have no human actor.
+    # Nullable: automated actions (e.g. the auto-close sweep) have no human actor.
     actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     diff_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

@@ -123,7 +123,7 @@ export function useReply(ticketId: number) {
       api<CommentCreateResult>(`/tickets/${ticketId}/comments`, { method: "POST", body }),
     onSuccess: () => {
       // The reply isn't returned with the ticket, so refetch it, the
-      // customer list and every agent queue (first reply switches the SLA clock).
+      // customer list and every agent queue (first reply sets first_responded_at).
       qc.invalidateQueries({ queryKey: keys.tickets });
     },
   });

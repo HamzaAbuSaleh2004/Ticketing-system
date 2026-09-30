@@ -292,11 +292,8 @@ async def test_closed_tickets_action_items_are_read_only(client, db_session):
         )
     ).json()
 
-    for target in ("triaged", "open"):
-        # `open` needs an assignee first.
-        if target == "open":
-            await client.patch(f"/tickets/{ticket_id}", json={"assignee_id": item["created_by"]}, headers=auth(agent_token))
-        await client.patch(f"/tickets/{ticket_id}", json={"status": target}, headers=auth(agent_token))
+    # in_progress needs an assignee first.
+    await client.patch(f"/tickets/{ticket_id}", json={"assignee_id": item["created_by"]}, headers=auth(agent_token))
     for target in ("in_progress", "resolved", "closed"):
         await client.patch(f"/tickets/{ticket_id}", json={"status": target}, headers=auth(agent_token))
 

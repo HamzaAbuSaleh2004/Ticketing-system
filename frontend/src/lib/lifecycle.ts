@@ -20,7 +20,7 @@ export function statusOptions(
   return allowed.map((value) => ({
     value,
     label: STATUS_LABEL[value],
-    disabledReason: current === "triaged" && value === "open" && assigneeId === null ? "Assign someone first" : null,
+    disabledReason: current === "open" && value === "in_progress" && assigneeId === null ? "Assign someone first" : null,
   }));
 }
 

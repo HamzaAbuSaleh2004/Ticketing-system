@@ -5,9 +5,7 @@ import { sys, type ColorRole } from "../../theme/scheme";
 import { typescale } from "../../theme/tokens";
 
 const TONE: Record<TicketStatus, { bg: ColorRole | null; fg: ColorRole; outline?: boolean }> = {
-  new: { bg: "surfaceContainerHighest", fg: "onSurfaceVariant" },
-  triaged: { bg: "surfaceContainerHighest", fg: "onSurfaceVariant" },
-  open: { bg: "secondaryContainer", fg: "onSecondaryContainer" },
+  open: { bg: "surfaceContainerHighest", fg: "onSurfaceVariant" },
   in_progress: { bg: "secondaryContainer", fg: "onSecondaryContainer" },
   // The one status that asks something of the customer gets the attention tone.
   pending: { bg: "tertiaryContainer", fg: "onTertiaryContainer" },
