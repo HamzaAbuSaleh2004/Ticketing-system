@@ -12,6 +12,7 @@ that's already an admin just says so and exits 0. Works with ENV=prod.
 import argparse
 import asyncio
 import getpass
+import os
 import sys
 from collections.abc import Callable
 
@@ -61,6 +62,11 @@ async def create_or_promote_admin(email: str, name: str, get_password: Callable[
 
 
 def _read_password() -> str:
+    # Non-interactive path for a Cloud Run job (no tty): the password comes
+    # from a one-off secret exposed as ADMIN_PASSWORD, deleted after the run.
+    env_password = os.environ.get("ADMIN_PASSWORD")
+    if env_password:
+        return env_password
     password = getpass.getpass("Password: ")
     confirm = getpass.getpass("Confirm password: ")
     if password != confirm:
