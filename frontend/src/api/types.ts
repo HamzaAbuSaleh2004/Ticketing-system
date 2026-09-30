@@ -93,10 +93,13 @@ export type TicketDetailPublic = TicketListItem & {
   action_items: ActionItem[];
 };
 
+export type Collaborator = { user_id: number; name: string };
+
 export type TicketQueueItem = TicketListItem & {
   requester_name: string | null;
   assignee_name: string | null;
   first_responded_at: string | null;
+  collaborators: Collaborator[];
 };
 
 export type TicketQueue = { items: TicketQueueItem[]; total: number; page: number; page_size: number };
@@ -114,6 +117,7 @@ export type TicketDetail = TicketDetailPublic & {
   requester_name: string | null;
   requester_email: string | null;
   assignee_name: string | null;
+  collaborators: Collaborator[];
   audit_log: AuditEntry[];
   allowed_transitions: TicketStatus[];
 };

@@ -85,6 +85,7 @@ export function AgentTicketPage() {
     (p: TicketPatch) => patch.mutate(p, { onError: (e) => setToast(errorMessage(e, "That change didn't save.")) }),
     [patch],
   );
+  const onError = useCallback((fallback: string) => (e: unknown) => setToast(errorMessage(e, fallback)), []);
   const columns = useMemo(
     () => (threePane ? "300px minmax(0,1fr) 360px" : twoPane ? "minmax(0,1fr) 340px" : "1fr"),
     [threePane, twoPane],
@@ -180,7 +181,7 @@ export function AgentTicketPage() {
       </Box>
 
       <Box component="aside" aria-label="Ticket properties" sx={{ ...pane, bgcolor: sys("surfaceContainerLow"), p: 2 }}>
-        <TicketSidePanel ticket={ticket} onPatch={onPatch} patching={patch.isPending} />
+        <TicketSidePanel ticket={ticket} onPatch={onPatch} patching={patch.isPending} onError={onError} />
       </Box>
 
       <Snackbar open={toast !== null} autoHideDuration={5000} onClose={() => setToast(null)} message={toast} />

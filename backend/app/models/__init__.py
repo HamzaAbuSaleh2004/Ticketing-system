@@ -15,6 +15,7 @@ from app.models.login_attempt import LoginAttempt
 from app.models.organization import Organization
 from app.models.ticket import Ticket
 from app.models.ticket_action_item import TicketActionItem
+from app.models.ticket_collaborator import TicketCollaborator
 from app.models.user import User
 
 __all__ = [
@@ -29,6 +30,7 @@ __all__ = [
     "Team",
     "Ticket",
     "TicketActionItem",
+    "TicketCollaborator",
     "TicketComment",
     "TicketPriority",
     "TicketStatus",

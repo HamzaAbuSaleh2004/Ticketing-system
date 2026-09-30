@@ -4,6 +4,7 @@ import type {
   ActionItem,
   ActionItemSide,
   Attachment,
+  Collaborator,
   CustomerSearchResult,
   TicketDetail,
   TicketPatch,
@@ -197,6 +198,14 @@ function invalidateTicket(qc: ReturnType<typeof useQueryClient>, ticketId: numbe
   qc.invalidateQueries({ queryKey: keys.ticket(ticketId) });
 }
 
+/** Same, plus every queue/list view - for changes the queue also displays
+ * (e.g. a collaborator's "+N" badge), so they don't go stale until the
+ * queue's own poll catches up. */
+function invalidateTicketAndLists(qc: ReturnType<typeof useQueryClient>, ticketId: number) {
+  invalidateTicket(qc, ticketId);
+  qc.invalidateQueries({ queryKey: keys.tickets });
+}
+
 export function useCreateActionItem(ticketId: number) {
   const qc = useQueryClient();
   return useMutation({
@@ -220,5 +229,22 @@ export function useDeleteActionItem(ticketId: number) {
   return useMutation({
     mutationFn: (id: number) => api<void>(`/tickets/${ticketId}/action-items/${id}`, { method: "DELETE" }),
     onSuccess: () => invalidateTicket(qc, ticketId),
+  });
+}
+
+export function useAddCollaborator(ticketId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: number) =>
+      api<Collaborator>(`/tickets/${ticketId}/collaborators`, { method: "POST", body: { user_id: userId } }),
+    onSuccess: () => invalidateTicketAndLists(qc, ticketId),
+  });
+}
+
+export function useRemoveCollaborator(ticketId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: number) => api<void>(`/tickets/${ticketId}/collaborators/${userId}`, { method: "DELETE" }),
+    onSuccess: () => invalidateTicketAndLists(qc, ticketId),
   });
 }

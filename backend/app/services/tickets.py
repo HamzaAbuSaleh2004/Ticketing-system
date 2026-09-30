@@ -1,11 +1,11 @@
 """Ticket mutations shared by the API routers, AI triage and the worker
 sweeps, so each rule lives in one place."""
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.lifecycle import escalate_priority
-from app.models import Team, Ticket, User
+from app.models import Team, Ticket, TicketCollaborator, User
 from app.models.enums import TicketPriority, TicketStatus, UserRole
 
 ACTIVE_STATUSES = [
@@ -29,6 +29,17 @@ async def lock_ticket(session: AsyncSession, ticket_id: int) -> Ticket | None:
 
 def set_priority(ticket: Ticket, priority: TicketPriority) -> None:
     ticket.priority = priority
+
+
+async def drop_as_collaborator(session: AsyncSession, ticket_id: int, user_id: int) -> None:
+    """The primary assignee and a collaborator are mutually exclusive:
+    call this whenever `assignee_id` is set to `user_id`, from any code
+    path (a manual PATCH, escalation's least-loaded-senior pick, ...)."""
+    await session.execute(
+        delete(TicketCollaborator).where(
+            TicketCollaborator.ticket_id == ticket_id, TicketCollaborator.user_id == user_id
+        )
+    )
 
 
 async def least_loaded_senior(session: AsyncSession) -> int | None:
@@ -62,6 +73,7 @@ async def escalate(session: AsyncSession, ticket: Ticket) -> tuple[dict, dict]:
     senior_id = await least_loaded_senior(session)
     if senior_id is not None:
         ticket.assignee_id = senior_id
+        await drop_as_collaborator(session, ticket.id, senior_id)
     after = {
         "priority": ticket.priority.value,
         "escalated": ticket.escalated,

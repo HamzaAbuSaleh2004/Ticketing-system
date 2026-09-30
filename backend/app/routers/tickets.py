@@ -26,6 +26,7 @@ from app.models import (
     Organization,
     Ticket,
     TicketActionItem,
+    TicketCollaborator,
     TicketComment,
     User,
 )
@@ -36,6 +37,8 @@ from app.schemas.ticket import (
     ActionItemPatch,
     AttachmentOut,
     AuditLogOut,
+    CollaboratorCreate,
+    CollaboratorOut,
     CommentCreate,
     CommentCreateResult,
     CommentOut,
@@ -48,7 +51,7 @@ from app.schemas.ticket import (
     TicketQueueItem,
     TicketQueueResponse,
 )
-from app.services.tickets import escalate, lock_ticket, set_priority
+from app.services.tickets import drop_as_collaborator, escalate, lock_ticket, set_priority
 from app.storage import Storage, get_storage
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
@@ -102,6 +105,17 @@ async def _require_active_organization(session: AsyncSession, organization_id: i
     org = await session.get(Organization, organization_id)
     if org is None or not org.active:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown or inactive organisation")
+
+
+async def _require_agent_user(session: AsyncSession, user_id: int, *, field: str) -> User:
+    """Used for both a ticket's primary assignee and its collaborators —
+    both must be an existing agent or admin, checked the same way."""
+    candidate = await session.get(User, user_id)
+    if candidate is None or candidate.role not in _AGENT_ROLES:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"{field} must be an existing agent or admin"
+        )
+    return candidate
 
 
 async def _get_ticket_or_404(
@@ -185,17 +199,38 @@ async def _build_ticket_detail(
     ).all()
     requester = await session.get(User, ticket.requester_id) if ticket.requester_id else None
     assignee = await session.get(User, ticket.assignee_id) if ticket.assignee_id else None
+    collaborators = await _collaborators_out(session, ticket.id)
     return TicketDetail(
         **public.model_dump(),
         requester_name=requester.name if requester else None,
         requester_email=requester.email if requester else None,
         assignee_name=assignee.name if assignee else None,
+        collaborators=collaborators,
         audit_log=[
             AuditLogOut.model_validate(row).model_copy(update={"actor_name": name})
             for row, name in audit_rows
         ],
         allowed_transitions=sorted(allowed_next_statuses(ticket.status), key=lambda s: s.value),
     )
+
+
+async def _collaborators_by_ticket(session: AsyncSession, ticket_ids: list[int]) -> dict[int, list[CollaboratorOut]]:
+    if not ticket_ids:
+        return {}
+    rows = await session.execute(
+        select(TicketCollaborator.ticket_id, TicketCollaborator.user_id, User.name)
+        .join(User, User.id == TicketCollaborator.user_id)
+        .where(TicketCollaborator.ticket_id.in_(ticket_ids))
+        .order_by(TicketCollaborator.added_at)
+    )
+    by_ticket: dict[int, list[CollaboratorOut]] = {}
+    for tid, uid, name in rows:
+        by_ticket.setdefault(tid, []).append(CollaboratorOut(user_id=uid, name=name))
+    return by_ticket
+
+
+async def _collaborators_out(session: AsyncSession, ticket_id: int) -> list[CollaboratorOut]:
+    return (await _collaborators_by_ticket(session, [ticket_id])).get(ticket_id, [])
 
 
 def _comment_out(comment: TicketComment, viewer: User) -> CommentOut:
@@ -313,7 +348,12 @@ async def list_tickets(
         conditions.append(or_(Ticket.subject.ilike(like), Ticket.description.ilike(like)))
     if assignee is not None:
         if assignee == "me":
-            conditions.append(Ticket.assignee_id == user.id)
+            is_collaborator = (
+                select(TicketCollaborator.id)
+                .where(TicketCollaborator.ticket_id == Ticket.id, TicketCollaborator.user_id == user.id)
+                .exists()
+            )
+            conditions.append(or_(Ticket.assignee_id == user.id, is_collaborator))
         elif assignee == "unassigned":
             conditions.append(Ticket.assignee_id.is_(None))
         else:
@@ -396,6 +436,9 @@ async def list_tickets(
             page=page,
             page_size=page_size,
         )
+
+    collab_map = await _collaborators_by_ticket(session, [t.id for t, *_ in rows])
+
     return TicketQueueResponse(
         items=[
             TicketQueueItem(
@@ -403,6 +446,7 @@ async def list_tickets(
                 requester_name=requester_name,
                 assignee_name=assignee_name,
                 first_responded_at=t.first_responded_at,
+                collaborators=collab_map.get(t.id, []),
             )
             for t, requester_name, assignee_name, org_name, org_kind, oc, ol in rows
         ],
@@ -490,15 +534,12 @@ async def patch_ticket(
     if "assignee_id" in changes and changes["assignee_id"] != ticket.assignee_id:
         new_assignee_id = changes["assignee_id"]
         if new_assignee_id is not None:
-            assignee = await session.get(User, new_assignee_id)
-            if assignee is None or assignee.role not in _AGENT_ROLES:
-                raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail="assignee_id must be an existing agent or admin",
-                )
+            await _require_agent_user(session, new_assignee_id, field="assignee_id")
         before["assignee_id"] = ticket.assignee_id
         ticket.assignee_id = new_assignee_id
         after["assignee_id"] = ticket.assignee_id
+        if new_assignee_id is not None:
+            await drop_as_collaborator(session, ticket.id, new_assignee_id)
 
     if changes.get("status") is not None and changes["status"] != ticket.status:
         target = changes["status"]
@@ -681,6 +722,72 @@ async def upload_attachment(
     await session.commit()
     await session.refresh(attachment)
     return AttachmentOut.model_validate(attachment)
+
+
+@router.post(
+    "/{ticket_id}/collaborators", response_model=CollaboratorOut, status_code=status.HTTP_201_CREATED
+)
+async def add_collaborator(
+    ticket_id: int,
+    body: CollaboratorCreate,
+    user: User = Depends(require_role(*_AGENT_ROLES)),
+    session: AsyncSession = Depends(get_db),
+) -> CollaboratorOut:
+    ticket = await _get_ticket_or_404(session, ticket_id, user, lock=True)
+    if ticket.status is TicketStatus.closed:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Closed tickets are read-only")
+
+    candidate = await _require_agent_user(session, body.user_id, field="user_id")
+    if body.user_id == ticket.assignee_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already the primary assignee")
+    exists = await session.scalar(
+        select(TicketCollaborator.id).where(
+            TicketCollaborator.ticket_id == ticket.id, TicketCollaborator.user_id == body.user_id
+        )
+    )
+    if exists is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already a collaborator")
+
+    collaborator = TicketCollaborator(ticket_id=ticket.id, user_id=body.user_id, added_by=user.id)
+    session.add(collaborator)
+    await write_audit(
+        session, entity_type="ticket", entity_id=ticket.id, actor_id=user.id,
+        action="ticket.collaborator_added",
+        diff={"after": {"user_id": body.user_id, "name": candidate.name}},
+    )
+    await session.commit()
+    return CollaboratorOut(user_id=candidate.id, name=candidate.name)
+
+
+@router.delete("/{ticket_id}/collaborators/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_collaborator(
+    ticket_id: int,
+    user_id: int,
+    user: User = Depends(require_role(*_AGENT_ROLES)),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    ticket = await _get_ticket_or_404(session, ticket_id, user, lock=True)
+    if ticket.status is TicketStatus.closed:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Closed tickets are read-only")
+
+    row = (
+        await session.execute(
+            select(TicketCollaborator, User.name)
+            .join(User, User.id == TicketCollaborator.user_id)
+            .where(TicketCollaborator.ticket_id == ticket.id, TicketCollaborator.user_id == user_id)
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not a collaborator")
+    collaborator, removed_name = row
+
+    await write_audit(
+        session, entity_type="ticket", entity_id=ticket.id, actor_id=user.id,
+        action="ticket.collaborator_removed",
+        diff={"before": {"user_id": user_id, "name": removed_name}},
+    )
+    await session.delete(collaborator)
+    await session.commit()
 
 
 async def _action_item_out(session: AsyncSession, item: TicketActionItem) -> ActionItemOut:

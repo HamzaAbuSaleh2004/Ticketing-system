@@ -81,6 +81,15 @@ class ActionItemOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CollaboratorCreate(BaseModel):
+    user_id: int
+
+
+class CollaboratorOut(BaseModel):
+    user_id: int
+    name: str
+
+
 class CommentCreate(BaseModel):
     body: str = Field(min_length=1)
     is_internal_note: bool = False
@@ -155,6 +164,7 @@ class TicketQueueItem(TicketListItem):
     requester_name: str | None
     assignee_name: str | None
     first_responded_at: datetime | None
+    collaborators: list[CollaboratorOut] = []
 
 
 class TicketQueueResponse(BaseModel):
@@ -189,6 +199,7 @@ class TicketDetail(TicketDetailPublic):
     requester_name: str | None
     requester_email: str | None
     assignee_name: str | None
+    collaborators: list[CollaboratorOut] = []
     audit_log: list[AuditLogOut]
     # Legal next statuses from the current one (domain/lifecycle.py), so the
     # UI's status control only ever offers a move the API will accept.

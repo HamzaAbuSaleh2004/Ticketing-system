@@ -1,7 +1,14 @@
 import TrendingUpOutlined from "@mui/icons-material/TrendingUpOutlined";
-import { Box, Button, Divider, ListItemText, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { Box, Button, Chip, Divider, ListItemText, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { useAuth } from "../../auth/AuthContext";
-import { useCategories, useCategoryName, useOrganizations, useStaff } from "../../api/hooks";
+import {
+  useAddCollaborator,
+  useCategories,
+  useCategoryName,
+  useOrganizations,
+  useRemoveCollaborator,
+  useStaff,
+} from "../../api/hooks";
 import type { TicketDetail, TicketPatch, TicketPriority } from "../../api/types";
 import { statusHint, statusOptions } from "../../lib/lifecycle";
 import { PRIORITY_LABEL, STATUS_LABEL } from "../../lib/tickets";
@@ -15,20 +22,28 @@ export function TicketSidePanel({
   ticket,
   onPatch,
   patching,
+  onError,
 }: {
   ticket: TicketDetail;
   onPatch: (p: TicketPatch) => void;
   patching: boolean;
+  onError: (fallback: string) => (e: unknown) => void;
 }) {
   const { user } = useAuth();
   const staff = useStaff();
   const categories = useCategories();
   const categoryName = useCategoryName();
   const organizations = useOrganizations();
+  const addCollaborator = useAddCollaborator(ticket.id);
+  const removeCollaborator = useRemoveCollaborator(ticket.id);
   const options = statusOptions(ticket.status, ticket.allowed_transitions, ticket.assignee_id);
   const locked = ticket.status === "closed";
   const canEscalate = !["resolved", "closed"].includes(ticket.status);
   const activeCategories = (categories.data ?? []).filter((c) => c.active || c.slug === ticket.category);
+  const collaboratorIds = new Set(ticket.collaborators.map((c) => c.user_id));
+  const addableStaff = (staff.data ?? []).filter(
+    (u) => u.id !== ticket.assignee_id && !collaboratorIds.has(u.id),
+  );
 
   return (
     <Stack spacing={2}>
@@ -88,6 +103,47 @@ export function TicketSidePanel({
             <Button size="small" onClick={() => onPatch({ assignee_id: user.id })} disabled={patching} sx={{ flexShrink: 0, mt: 0.5 }}>
               Take it
             </Button>
+          ) : null}
+        </Stack>
+
+        <Stack spacing={0.75}>
+          {ticket.collaborators.length ? (
+            <Stack direction="row" sx={{ gap: 0.5, flexWrap: "wrap" }}>
+              {ticket.collaborators.map((c) => (
+                <Chip
+                  key={c.user_id}
+                  size="small"
+                  label={c.name}
+                  disabled={locked || removeCollaborator.isPending}
+                  onDelete={
+                    !locked
+                      ? () => removeCollaborator.mutate(c.user_id, { onError: onError("That collaborator couldn't be removed.") })
+                      : undefined
+                  }
+                />
+              ))}
+            </Stack>
+          ) : null}
+          {!locked && addableStaff.length ? (
+            <TextField
+              select
+              size="small"
+              fullWidth
+              value=""
+              disabled={addCollaborator.isPending}
+              onChange={(e) =>
+                addCollaborator.mutate(Number(e.target.value), { onError: onError("That collaborator didn't save.") })
+              }
+              slotProps={{
+                select: { displayEmpty: true, renderValue: () => "+ Add collaborator", "aria-label": "Add collaborator" },
+              }}
+            >
+              {addableStaff.map((u) => (
+                <MenuItem key={u.id} value={u.id}>
+                  {u.name}
+                </MenuItem>
+              ))}
+            </TextField>
           ) : null}
         </Stack>
 

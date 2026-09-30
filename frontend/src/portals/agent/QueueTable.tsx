@@ -109,8 +109,12 @@ export function QueueTable({
                 <TableCell sx={cell}>
                   <StatusChip status={t.status} />
                 </TableCell>
-                <TableCell sx={{ ...cell, color: t.assignee_name ? sys("onSurface") : sys("onSurfaceVariant") }}>
+                <TableCell
+                  sx={{ ...cell, color: t.assignee_name ? sys("onSurface") : sys("onSurfaceVariant") }}
+                  title={t.collaborators.length ? `Also: ${t.collaborators.map((c) => c.name).join(", ")}` : undefined}
+                >
                   {t.assignee_name ?? "Unassigned"}
+                  {t.collaborators.length ? ` +${t.collaborators.length}` : ""}
                 </TableCell>
                 <TableCell sx={{ ...cell, color: sys("onSurfaceVariant") }}>
                   {waitingOnText(t.open_customer_items, t.open_liverx_items) ?? "Nothing pending"}

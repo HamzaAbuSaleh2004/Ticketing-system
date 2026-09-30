@@ -11,6 +11,8 @@ const ACTION: Record<string, string> = {
   "ticket.updated": "updated",
   "ticket.reopened_by_reply": "reopened it by replying",
   "ticket.auto_closed": "closed it after the reopen window",
+  "ticket.collaborator_added": "added a collaborator",
+  "ticket.collaborator_removed": "removed a collaborator",
 };
 
 type Namer = { staff: User[] | undefined; category: (slug: string | null) => string | null };
@@ -29,6 +31,8 @@ function describe(key: string, value: unknown, names: Namer): string | null {
       return value ? "Escalated" : null;
     case "parent_ticket_id":
       return `Follow-up to ${ticketRef(Number(value))}`;
+    case "name":
+      return `Collaborator ${value}`;
     default:
       return null;
   }
@@ -53,8 +57,12 @@ export function AuditTrail({ entries, names }: { entries: AuditEntry[]; names: N
       <AccordionDetails sx={{ px: 0, pt: 0 }}>
         <Box component="ol" sx={{ listStyle: "none", p: 0, m: 0, display: "grid", gap: 1.5 }}>
           {[...entries].reverse().map((e) => {
-            const after = (e.diff_json?.after ?? {}) as Record<string, unknown>;
-            const details = Object.entries(after)
+            // A removal (e.g. an action item or collaborator taken off the
+            // ticket) only ever populates `before` — fall back to it so its
+            // details still show, instead of silently rendering nothing.
+            const afterFields = e.diff_json?.after ?? {};
+            const fields = (Object.keys(afterFields).length ? afterFields : e.diff_json?.before ?? {}) as Record<string, unknown>;
+            const details = Object.entries(fields)
               .map(([k, v]) => describe(k, v, names))
               .filter(Boolean);
             return (
