@@ -20,8 +20,13 @@ const COLUMNS: { key: string; label: string; width?: number; align?: "right" }[]
 
 const cell = { py: 0, px: 1.5, height: 36, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } as const;
 
+// Its own rhythm, not the 36px/py:0 body-row box: real breathing room above
+// and below the label, and (since "& td" on TableRow doesn't reach a <th>)
+// an explicit border colour so the header rule matches the body rows' one.
+const headerCell = { height: 40, py: 1, px: 1.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } as const;
+
 /** Dense, full-bleed queue: 36px rows, tabular IDs.
- * j/k move the selection, Enter opens it (handled by the page). */
+ * Arrow keys move the selection, Enter opens it (handled by the page). */
 export function QueueTable({
   rows,
   selected,
@@ -49,7 +54,14 @@ export function QueueTable({
               <TableCell
                 key={c.key}
                 align={c.align}
-                sx={{ ...cell, width: c.width, bgcolor: sys("surface"), color: sys("onSurfaceVariant"), typography: "labelMedium" }}
+                sx={{
+                  ...headerCell,
+                  width: c.width,
+                  bgcolor: sys("surface"),
+                  color: sys("onSurfaceVariant"),
+                  typography: "labelMedium",
+                  borderBottomColor: sys("outlineVariant"),
+                }}
               >
                 {c.label}
               </TableCell>

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { useCategories, useOrganizations, useStaff } from "../../api/hooks";
 import type { TicketPriority, TicketStatus } from "../../api/types";
+import { useAuth } from "../../auth/AuthContext";
 import { STATUS_LABEL } from "../../lib/tickets";
 import { sys } from "../../theme/scheme";
 import { FilterChip } from "./FilterChip";
@@ -22,6 +23,7 @@ export function QueueToolbar({
   total: number | undefined;
   onChange: (next: Partial<QueueFilters>) => void;
 }) {
+  const { user } = useAuth();
   const staff = useStaff();
   const categories = useCategories();
   const organizations = useOrganizations();
@@ -98,7 +100,13 @@ export function QueueToolbar({
             { value: null, label: "Anyone" },
             { value: "me", label: "Mine" },
             { value: "unassigned", label: "Unassigned" },
-            ...(staff.data ?? []).map((u) => ({ value: String(u.id), label: u.name })),
+            // "Mine" already covers the signed-in agent - don't list them
+            // twice, unless a link/bookmark already has their own id as the
+            // filter (then FilterChip needs it in the list to show the name
+            // instead of falling back to the generic "Assignee" label).
+            ...(staff.data ?? [])
+              .filter((u) => u.id !== user?.id || String(u.id) === filters.assignee)
+              .map((u) => ({ value: String(u.id), label: u.name })),
           ]}
           onChange={(v) => onChange({ assignee: v, page: 1 })}
         />

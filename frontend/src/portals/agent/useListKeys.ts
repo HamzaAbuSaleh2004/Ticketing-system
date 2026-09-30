@@ -8,8 +8,8 @@ const interactiveTarget = (el: EventTarget | null) =>
     ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(el.tagName) ||
     el.closest('[role="menu"], [role="dialog"], [role="listbox"], [role="combobox"], [role="button"]') !== null);
 
-/** j/k move the selection, Enter opens it; ignored while typing or when a
- * menu/dialog has focus. */
+/** Arrow keys move the selection, Enter opens it; ignored while typing or
+ * when a menu/dialog has focus. */
 export function useListKeys(
   count: number,
   selected: number,
@@ -21,10 +21,10 @@ export function useListKeys(
     if (!enabled) return;
     function onKey(e: KeyboardEvent) {
       if (e.altKey || e.ctrlKey || e.metaKey || interactiveTarget(e.target) || count === 0) return;
-      if (e.key === "j") {
+      if (e.key === "ArrowDown") {
         e.preventDefault();
         setSelected(Math.min(selected + 1, count - 1));
-      } else if (e.key === "k") {
+      } else if (e.key === "ArrowUp") {
         e.preventDefault();
         setSelected(Math.max(selected - 1, 0));
       } else if (e.key === "Enter" && selected >= 0 && !(e.target instanceof HTMLAnchorElement)) {

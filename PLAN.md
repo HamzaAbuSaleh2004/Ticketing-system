@@ -783,7 +783,14 @@ Each phase ends with **Verify**: commands the executor must actually run, with t
   - `test_escalation_only_touches_the_primary_assignee` and `test_mine_filter_matches_collaborators_not_just_the_primary` cover the plan's two specific verify asks directly.
 
 ### Phase 21 — Queue page fixes
-- [ ] Arrow keys replace j/k; header spacing fixed; assignee filter no longer double-lists the current user; SLA-era default sort already gone (Phase 19) — confirm the new default reads well.
+- [x] **Shortcuts:** `useListKeys.ts`'s "j"/"k" replaced with `ArrowDown`/`ArrowUp` (interactive-target guard and the Enter-to-open behaviour unchanged); the footer hint (`QueuePage.tsx`) and every stale "j/k" code comment (`QueueTable.tsx`, `AgentTicketPage.tsx` ×2) updated to match; the e2e spec (`phase8-agent.spec.ts`) updated to press the new keys.
+- [x] **Header spacing:** `QueueTable.tsx` gets its own `headerCell` style (40px, real `py: 1` padding) instead of reusing the 36px/`py:0` body-row `cell`, plus an explicit `borderBottomColor` (the `"& td"` border-colour rule on `TableRow` doesn't reach a `<th>`, so the header was inheriting MUI's default divider colour instead of matching the body rows').
+- [x] **Assignee filter dedup:** `QueueToolbar.tsx` excludes the signed-in agent from the named-staff options ("Mine" already covers them), but keeps them in the list when the URL already has their own id as the active filter (a code-review finding: `FilterChip`'s label lookup uses the same `options` array, so removing the entry unconditionally would fall back to a generic "Assignee" label for anyone who had that filter bookmarked/linked before this change).
+- [x] Default sort (`-updated_at`, from Phase 19's forced fix) confirmed reading well: most-recently-touched tickets surface first, no SLA-era ordering left.
+- [x] `code-review --high` run twice; the one finding (the FilterChip label-lookup edge case above) fixed and reconfirmed clean.
+- **Verify:**
+  - `docker compose exec frontend npx tsc --noEmit` clean, `npx vitest run` → **22 passed**, `npm run build` succeeds.
+  - Screenshots against the running stack: header row now shows clear vertical breathing room above/below the labels vs. the cramped 36px box before; the Assignee dropdown lists Anyone/Mine/Unassigned/Ada Admin/Sasha Senior/Tom Tier1 while signed in as Tara Tier1 — her own name is absent, no duplication; pressing `ArrowDown` twice moved the selected-row highlight down two rows exactly as `j`/`k` used to.
 
 ### Phase 22 — Ticket detail redesign, composer, inline attachments
 - [ ] Remove the left ticket-list rail; make the ticket's subject/description a distinct field, not the thread's first "message"; group the properties panel; Enter-to-send composer with a taller cap and the button beside the field; inline image/PDF viewing.

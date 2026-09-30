@@ -64,8 +64,8 @@ export function QueuePage() {
         sx={{ mt: "auto", px: { xs: 2, md: 3 }, py: 1, alignItems: "center", justifyContent: "space-between", gap: 2, borderTop: `1px solid ${sys("outlineVariant")}` }}
       >
         <Typography variant="bodySmall" sx={{ color: sys("onSurfaceVariant") }}>
-          <Box component="kbd" sx={{ fontFamily: "inherit", fontWeight: 600 }}>j</Box> and{" "}
-          <Box component="kbd" sx={{ fontFamily: "inherit", fontWeight: 600 }}>k</Box> to move,{" "}
+          <Box component="kbd" sx={{ fontFamily: "inherit", fontWeight: 600 }}>↓</Box> and{" "}
+          <Box component="kbd" sx={{ fontFamily: "inherit", fontWeight: 600 }}>↑</Box> to move,{" "}
           <Box component="kbd" sx={{ fontFamily: "inherit", fontWeight: 600 }}>Enter</Box> to open
         </Typography>
         <Stack direction="row" sx={{ alignItems: "center", gap: 0.5 }}>

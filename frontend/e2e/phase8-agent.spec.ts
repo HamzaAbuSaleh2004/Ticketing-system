@@ -67,11 +67,11 @@ test("agent walks a ticket through the full lifecycle in the UI, internal note s
   await expect(table.getByRole("link", { name: subject })).toBeVisible();
   await page.goto("/agent");
 
-  // Keyboard: j/k move the selection, Enter opens it.
+  // Keyboard: arrow keys move the selection, Enter opens it.
   await page.locator("body").click({ position: { x: 5, y: 5 } });
-  await page.keyboard.press("j");
+  await page.keyboard.press("ArrowDown");
   await expect(table.locator('tr[aria-selected="true"]')).toHaveCount(1);
-  await page.keyboard.press("k");
+  await page.keyboard.press("ArrowUp");
   await table.getByRole("link", { name: subject }).click();
   await expect(page).toHaveURL(new RegExp(`/agent/tickets/${id}$`));
   await expect(page.getByRole("heading", { name: subject })).toBeVisible();

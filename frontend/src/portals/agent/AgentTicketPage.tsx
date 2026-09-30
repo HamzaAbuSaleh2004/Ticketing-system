@@ -17,7 +17,7 @@ import { useListKeys } from "./useListKeys";
 const pane = { borderRadius: "var(--md-sys-shape-corner-small)", overflowY: "auto", minHeight: 0 } as const;
 
 /** Narrow queue pane (large windows): the same filtered queue, one row per
- * ticket, so j/k walk tickets without leaving the workspace. */
+ * ticket, so the arrow keys walk tickets without leaving the workspace. */
 function QueuePane({ currentId, search, keysEnabled }: { currentId: number; search: string; keysEnabled: boolean }) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -123,7 +123,7 @@ export function AgentTicketPage() {
         bgcolor: sys("surface"),
       }}
     >
-      {/* j/k switch tickets, so they pause while there's an unsent draft. */}
+      {/* Arrow keys switch tickets, so they pause while there's an unsent draft. */}
       {threePane ? <QueuePane currentId={id} search={search} keysEnabled={!draft.body.trim()} /> : null}
 
       <Box component="section" aria-label="Ticket" sx={{ ...pane, bgcolor: sys("surfaceContainerHigh"), p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
