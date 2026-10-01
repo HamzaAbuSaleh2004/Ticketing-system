@@ -13,11 +13,15 @@ async function provisionCustomer(email: string, name: string, password: string) 
   await admin.post("/users", { email, name, role: "end_user", password });
 }
 
-for (const colorScheme of ["light", "dark"] as const) {
-  test.describe(`${colorScheme} theme`, () => {
-    test.use({ colorScheme });
+// Phase 25: light only, regardless of the OS's own color-scheme preference
+// (the dark/system options were removed from ThemeMenu; ThemeController
+// hardcodes isDark = false). Both OS preferences are exercised here to prove
+// that, not just the default one.
+for (const osColorScheme of ["light", "dark"] as const) {
+  test.describe(`OS prefers ${osColorScheme}`, () => {
+    test.use({ colorScheme: osColorScheme });
 
-    test(`tokens and login screenshots (${colorScheme})`, async ({ page }) => {
+    test(`renders light regardless (OS prefers ${osColorScheme})`, async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.goto("/_tokens");
       await expect(page.getByRole("heading", { name: "Design tokens" })).toBeVisible();
@@ -25,15 +29,20 @@ for (const colorScheme of ["light", "dark"] as const) {
       const primary = await page.evaluate(() =>
         getComputedStyle(document.documentElement).getPropertyValue("--md-sys-color-primary").trim(),
       );
-      expect(primary).toBe(colorScheme === "light" ? "#006688" : "#75d1ff");
-      await shot(page, "phase-6", `tokens-${colorScheme}`);
+      expect(primary).toBe("#006688");
+      await shot(page, "phase-6", `tokens-${osColorScheme}`);
 
       await page.goto("/login");
       await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-      await shot(page, "phase-6", `login-${colorScheme}-1280`);
+      // No theme-mode picker left, only the contrast toggle.
+      await page.getByRole("button", { name: "Contrast" }).click();
+      await expect(page.getByRole("menuitemradio", { name: "Standard contrast" })).toBeVisible();
+      await expect(page.getByRole("menuitemradio", { name: /^(Match system|Light|Dark)$/ })).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await shot(page, "phase-6", `login-${osColorScheme}-1280`);
 
       await page.setViewportSize({ width: 360, height: 780 });
-      await shot(page, "phase-6", `login-${colorScheme}-360`);
+      await shot(page, "phase-6", `login-${osColorScheme}-360`);
     });
   });
 }

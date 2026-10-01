@@ -1,14 +1,13 @@
-import { CssBaseline, GlobalStyles, ThemeProvider, useMediaQuery, useTheme } from "@mui/material";
+import { CssBaseline, GlobalStyles, ThemeProvider, useTheme } from "@mui/material";
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { buildMuiTheme, type Density } from "./muiTheme";
 import { generateScheme, schemeCssVars, type ColorScheme, type Contrast } from "./scheme";
 import { staticCssVars } from "./tokens";
 
-export type ThemeMode = "system" | "light" | "dark";
+// Phase 25: light only, brand decision - no dark/system mode to choose from.
+const isDark = false;
 
 type ThemeState = {
-  mode: ThemeMode;
-  setMode: (mode: ThemeMode) => void;
   contrast: Contrast;
   setContrast: (contrast: Contrast) => void;
   isDark: boolean;
@@ -18,18 +17,17 @@ type ThemeState = {
 const ThemeContext = createContext<ThemeState | null>(null);
 const STORAGE_KEY = "ticketing.theme";
 
-function readStored(): { mode: ThemeMode; contrast: Contrast } {
+function readStored(): { contrast: Contrast } {
   try {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
-    const mode = ["system", "light", "dark"].includes(raw.mode) ? raw.mode : "system";
     const contrast = [0, 0.5, 1].includes(raw.contrast) ? raw.contrast : 0;
-    return { mode, contrast };
+    return { contrast };
   } catch {
-    return { mode: "system", contrast: 0 };
+    return { contrast: 0 };
   }
 }
 
-function store(value: { mode: ThemeMode; contrast: Contrast }) {
+function store(value: { contrast: Contrast }) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
   } catch {
@@ -38,25 +36,21 @@ function store(value: { mode: ThemeMode; contrast: Contrast }) {
 }
 
 export function ThemeController({ children }: { children: ReactNode }) {
-  const [{ mode, contrast }, setState] = useState(readStored);
-  const prefersDark = useMediaQuery("(prefers-color-scheme: dark)", { noSsr: true });
-  const isDark = mode === "dark" || (mode === "system" && prefersDark);
-  const scheme = useMemo(() => generateScheme(isDark, contrast), [isDark, contrast]);
+  const [{ contrast }, setState] = useState(readStored);
+  const scheme = useMemo(() => generateScheme(isDark, contrast), [contrast]);
 
-  const value = useMemo<ThemeState>(() => {
-    const update = (next: { mode: ThemeMode; contrast: Contrast }) => {
-      store(next);
-      setState(next);
-    };
-    return {
-      mode,
+  const value = useMemo<ThemeState>(
+    () => ({
       contrast,
       isDark,
       scheme,
-      setMode: (m) => update({ mode: m, contrast }),
-      setContrast: (c) => update({ mode, contrast: c }),
-    };
-  }, [mode, contrast, isDark, scheme]);
+      setContrast: (c) => {
+        store({ contrast: c });
+        setState({ contrast: c });
+      },
+    }),
+    [contrast, scheme],
+  );
 
   const rootVars = useMemo(() => ({ ...staticCssVars(), ...schemeCssVars(scheme) }), [scheme]);
 
